@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review Studio</title>
+<style>
+:root{--bg:#f6f7f7;--surface:#fff;--ink:#1b2425;--muted:#586769;--line:#d8dede;--teal:#0f766e;--teal-ink:#fff;--soft:#e7f1f0;--warn:#8a5a00;--warn-bg:#fdf3dc;--bad:#a12626;--bad-bg:#fbe9e9;--ok:#1d6b3a;--ok-bg:#e5f3ea;--r:8px}
+@media (prefers-color-scheme:dark){:root{--bg:#141919;--surface:#1c2323;--ink:#e6ecec;--muted:#9fb0b1;--line:#334041;--teal:#3fb5aa;--teal-ink:#06201e;--soft:#213231;--warn:#f0c46a;--warn-bg:#3a2f14;--bad:#f19a9a;--bad-bg:#3b1e1e;--ok:#8fd3a6;--ok-bg:#1b3324}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+h1{font-size:17px;margin:0}h2{font-size:16px;margin:0 0 8px}h3{font-size:14px;margin:14px 0 6px}
+p{margin:6px 0}.muted{color:var(--muted)}.small{font-size:13px}
+header{background:var(--surface);border-bottom:1px solid var(--line);padding:10px 14px;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
+header .meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--muted)}
+nav{display:flex;gap:4px;overflow-x:auto;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--line)}
+nav button{white-space:nowrap}
+main{padding:14px;max-width:1280px;margin:0 auto}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:6px 11px;cursor:pointer}
+button:hover{border-color:var(--teal)}
+button.primary{background:var(--teal);color:var(--teal-ink);border-color:var(--teal);font-weight:600}
+button.tab[aria-current=page]{background:var(--soft);border-color:var(--teal);font-weight:600}
+button:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+input,select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;max-width:100%}
+textarea{width:100%;min-height:64px}label{display:block;font-size:13px;color:var(--muted);margin:8px 0 2px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:12px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 9px;font-size:12px;color:var(--muted)}
+.pill.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}.pill.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}.pill.bad{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:var(--r);padding:8px 12px;margin:8px 0}
+.err{background:var(--bad-bg);color:var(--bad);border-radius:var(--r);padding:8px 12px;margin:8px 0}
+.okbox{background:var(--ok-bg);color:var(--ok);border-radius:var(--r);padding:8px 12px;margin:8px 0}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;color:var(--muted);font-weight:600}
+.num{font-size:22px;font-weight:650}.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:14px}.kv dt{color:var(--muted)}.kv dd{margin:0}
+#confirmbar{position:sticky;top:0;z-index:5}
+#confirmbar .card{border-color:var(--teal);box-shadow:0 2px 10px rgba(0,0,0,.12)}
+#status{font-size:12px}
+.screen{display:grid;gap:12px;grid-template-columns:minmax(220px,300px) minmax(0,1fr) minmax(240px,320px)}
+.queue{max-height:70vh;overflow:auto;padding:0}.queue button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:8px 10px}
+.queue button[aria-current=true]{background:var(--soft)}
+.abstract{white-space:pre-wrap}
+.subtabs{display:none}
+@media (max-width:980px){.screen{grid-template-columns:1fr}.subtabs{display:flex;gap:4px;margin-bottom:8px}.screen>[data-pane]{display:none}.screen>[data-pane].on{display:block}}
+code,pre{font:13px ui-monospace,Menlo,Consolas,monospace}pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);padding:8px;border-radius:6px;max-height:260px;overflow:auto}
+</style>
+</head>
+<body>
+<header id="hdr"></header>
+<nav id="nav" aria-label="Sections"></nav>
+<div id="confirmbar"></div>
+<main id="main" tabindex="-1"><p class="muted">Loading Review Studio…</p></main>
+<script>
+"use strict";
+// Review Studio screen. One file, no dependencies. Runs (a) inside Claude as an MCP App, talking to the server through the host,
+// or (b) in a normal browser tab, signed in directly. All text that comes from records or people is escaped before display.
+const SB = "https://wiomuxjhozhymxeuaihx.supabase.co";
+const KEY = "sb_publishable_yHEz3GmzwWjgAXUsGvl2og_OEXrYUBc"; // publishable key: public by design
+const API = SB + "/functions/v1/mcp/api/call";
+const VERSION = "0.1.0";
+const S = { mode: null, lang: "en", me: null, rid: null, ov: null, view: "portfolio", stage: "ta", filter: "todo", queue: null, rec: null, crit: null, pane: "queue",
+  pending: [], data: {}, status: "", err: null, flash: null, session: null, consent: null };
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const L = (en, pt) => (S.lang === "pt-BR" && pt ? pt : en);
+const time = (v) => { try { return new Date(v).toLocaleString(S.lang, { dateStyle: "short", timeStyle: "short" }); } catch { return String(v ?? ""); } };
+const has = (cap) => (S.ov?.your_capabilities ?? []).includes(cap);
+const isMod = () => S.ov ? S.ov.your_role === "principal_moderator" : !!S.me?.is_principal_moderator;
+
+/* ---------- transport ---------- */
+const rpcWait = new Map(); let rpcId = 0;
+function hostSend(method, params) { const id = ++rpcId; window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*"); return new Promise((res, rej) => rpcWait.set(id, { res, rej })); }
+function hostNotify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params: params ?? {} }, "*"); }
+window.addEventListener("message", (ev) => {
+  const m = ev.data; if (!m || m.jsonrpc !== "2.0") return;
+  if (m.id !== undefined && (m.result !== undefined || m.error !== undefined) && rpcWait.has(m.id)) {
+    const w = rpcWait.get(m.id); rpcWait.delete(m.id); m.error ? w.rej(m.error) : w.res(m.result); return;
+  }
+  if (m.method === "ui/notifications/tool-input" && m.params?.arguments?.review_id) { S.pendingOpen = m.params.arguments.review_id; if (S.me) openReview(S.pendingOpen); }
+  else if (m.method === "ui/notifications/tool-result") { const sc = m.params?.structuredContent; if (sc?.user_id) { S.me = sc; if (sc.opened_review?.review_id && !S.rid) openReview(sc.opened_review.review_id); else render(); } }
+  else if (m.method === "ui/notifications/host-context-changed" && m.params?.locale) { /* language stays the person's own choice */ }
+  else if ((m.method === "ui/resource-teardown" || m.method === "ping") && m.id !== undefined) window.parent.postMessage({ jsonrpc: "2.0", id: m.id, result: {} }, "*");
+});
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+
+function loadSession() { try { S.session = JSON.parse(localStorage.getItem("rs.session") || "null"); } catch { S.session = null; } }
+function saveSession(s) { S.session = s; try { s ? localStorage.setItem("rs.session", JSON.stringify(s)) : localStorage.removeItem("rs.session"); } catch { /* storage may be unavailable */ } }
+async function auth(path, body) {
+  const r = await fetch(SB + "/auth/v1/" + path, { method: "POST", headers: { apikey: KEY, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw { code: j.error_code || j.code || "auth_error", message: j.msg || j.message || j.error_description || "Sign-in failed" };
+  return j;
+}
+function keepSession(j) { if (j.access_token) saveSession({ access_token: j.access_token, refresh_token: j.refresh_token, expires_at: Date.now() + (j.expires_in ?? 3600) * 1000, email: j.user?.email }); }
+async function token() {
+  if (!S.session) throw { code: "not_authenticated", message: "Sign in first" };
+  if (S.session.expires_at - Date.now() < 60000 && S.session.refresh_token) {
+    try { keepSession(await auth("token?grant_type=refresh_token", { refresh_token: S.session.refresh_token })); } catch { saveSession(null); throw { code: "not_authenticated", message: "Your session ended. Sign in again." }; }
+  }
+  return S.session.access_token;
+}
+
+async function call(tool, args, quiet) {
+  if (!quiet) setStatus("saving");
+  try {
+    let out;
+    if (S.mode === "mcp") {
+      const r = await hostSend("tools/call", { name: tool, arguments: args ?? {} });
+      out = r.structuredContent ?? (r.content?.[0]?.text ? JSON.parse(r.content[0].text) : null);
+      if (r.isError) throw (out?.error ?? { code: "error", message: "The request failed" });
+    } else {
+      const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await token()) }, body: JSON.stringify({ tool, arguments: args ?? {} }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 401) { saveSession(null); throw { code: "not_authenticated", message: "Sign in again" }; }
+      if (!j.ok) throw (j.error ?? { code: "error", message: "The request failed (" + r.status + ")" });
+      out = j.result;
+    }
+    if (!quiet) setStatus("ok");
+    return out;
+  } catch (e) {
+    const err = e && e.message ? { code: e.code ?? "error", message: e.message } : { code: "network", message: "Could not reach Review Studio. Nothing was saved." };
+    if (!quiet) setStatus("failed");
+    throw err;
+  }
+}
+function setStatus(s) { S.status = s; const el = $("#status"); if (el) el.outerHTML = statusPill(); }
+const statusPill = () => S.status === "saving" ? `<span id="status" class="pill warn" role="status">${L("Working…", "Processando…")}</span>` : S.status === "failed" ? `<span id="status" class="pill bad" role="status">${L("Failed — not saved", "Falhou — não salvo")}</span>` : S.status === "ok" ? `<span id="status" class="pill ok" role="status">${L("Done", "Concluído")}</span>` : `<span id="status" class="pill" role="status">${L("Idle", "Parado")}</span>`;
+
+/* ---------- data loading ---------- */
+async function guard(fn) { S.err = null; try { await fn(); } catch (e) { S.err = e; } render(); }
+async function boot() {
+  loadSession();
+  const q = new URLSearchParams(location.search);
+  if (location.hash.includes("access_token=")) { // return from an email confirmation link
+    const h = new URLSearchParams(location.hash.slice(1));
+    saveSession({ access_token: h.get("access_token"), refresh_token: h.get("refresh_token"), expires_at: Date.now() + Number(h.get("expires_in") || 3600) * 1000 });
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  if (q.get("authorization_id")) { S.mode = "web"; S.consent = { id: q.get("authorization_id") }; return S.session ? loadConsent() : render(); }
+  if (window.parent !== window) {
+    try {
+      const r = await withTimeout(hostSend("ui/initialize", { protocolVersion: "2026-01-26", clientInfo: { name: "Review Studio", version: VERSION }, appInfo: { name: "Review Studio", version: VERSION }, appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] } }), 2500);
+      S.mode = "mcp"; S.host = r; hostNotify("ui/notifications/initialized");
+      new ResizeObserver(() => hostNotify("ui/notifications/size-changed", { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })).observe(document.body);
+    } catch { S.mode = "web"; }
+  } else S.mode = "web";
+  if (S.mode === "web" && !S.session) return render();
+  await guard(async () => { S.me = await call("whoami", {}, true); S.lang = S.me.locale || "en"; });
+  const want = S.pendingOpen || q.get("review");
+  if (want && S.me) openReview(want);
+}
+async function openReview(rid) { S.rid = rid; S.view = "overview"; S.queue = null; S.rec = null; S.crit = null; S.data = {}; await show("overview"); }
+async function refreshPending() { try { S.pending = (await call("pending_confirmations", S.rid ? { review_id: S.rid } : {}, true)).confirmations; } catch { /* shown on next action */ } }
+const LOADERS = {
+  portfolio: async () => { S.me = await call("whoami", {}, true); },
+  overview: async () => { S.ov = await call("get_review_status", { review_id: S.rid }, true); },
+  protocol: async () => { S.data.review = await call("get_review", { review_id: S.rid }, true); S.crit = await call("list_criteria", { review_id: S.rid }, true); },
+  imports: async () => { S.data.sources = await call("list_sources", { review_id: S.rid }, true); },
+  duplicates: async () => { S.data.dd = await call("dedup_status", { review_id: S.rid }, true); },
+  screening: async () => { if (!S.crit) S.crit = await call("list_criteria", { review_id: S.rid }, true); S.queue = await call("get_queue", { review_id: S.rid, stage: S.stage, filter: S.filter, limit: 200 }, true); if (S.rec && !S.queue.items.some((i) => i.record_id === S.rec.record.record_id)) S.rec = null; },
+  prisma: async () => { S.data.prisma = await call("get_prisma", { review_id: S.rid }, true); },
+  team: async () => { S.data.team = await call("list_team", { review_id: S.rid }, true); },
+  approvals: async () => { S.data.approvals = await call("list_approvals", { review_id: S.rid, status: "all" }, true); },
+  activity: async () => { S.data.audit = await call("get_audit", { review_id: S.rid, limit: 100 }, true); },
+  connections: async () => { S.me = await call("whoami", {}, true); },
+};
+async function show(view) {
+  S.view = view; S.flash = null;
+  await guard(async () => { if (S.rid && !S.ov) S.ov = await call("get_review_status", { review_id: S.rid }, true); if (LOADERS[view]) await LOADERS[view](); await refreshPending(); });
+  $("#main").focus({ preventScroll: true });
+}
+const reload = () => show(S.view);
+
+/* ---------- views ---------- */
+const NAV = [["overview", "Overview", "Visão geral"], ["protocol", "Protocol", "Protocolo"], ["imports", "Searches and imports", "Buscas e importações"], ["duplicates", "Duplicates", "Duplicatas"],
+  ["screening", "Screening", "Triagem"], ["prisma", "PRISMA tracker", "PRISMA"], ["team", "Team", "Equipe"], ["approvals", "Moderator approvals", "Aprovações"], ["activity", "Activity and export", "Atividade e exportação"],
+  ["later", "Extraction · Bias · R analyses · Reporting", "Extração · Viés · R · Relatório"], ["connections", "Connections", "Conexões"]];
+function renderChrome() {
+  const o = S.ov;
+  $("#hdr").innerHTML = `<h1>Review Studio</h1>` + (o && S.rid ? `<div class="meta"><strong style="color:var(--ink)">${esc(o.code)} · ${esc(o.title)}</strong>${o.is_synthetic ? `<span class="pill warn">SYNTHETIC TEST DATA</span>` : ""}
+      <span>${L("Status", "Situação")}: ${esc(o.status)}</span><span>${L("Protocol", "Protocolo")}: ${esc(o.protocol?.label ?? "—")} (${esc(o.protocol?.status ?? "none")})</span>
+      <span>${L("You", "Você")}: ${esc(o.your_role === "principal_moderator" ? L("principal moderator", "moderador principal") : L("member", "membro"))}${o.your_capabilities?.length ? " · " + esc(o.your_capabilities.join(", ")) : ""}</span>
+      <span>${L("Retrieved", "Consultado")}: ${esc(time(o.retrieved_at))}</span></div>` : `<div class="meta">${S.me ? esc(S.me.email ?? "") : ""}</div>`) +
+    `<div class="row" style="margin-left:auto">${statusPill()}${S.rid ? `<button data-a="reload">${L("Refresh", "Atualizar")}</button><button data-a="portfolio">${L("All reviews", "Todas as revisões")}</button>` : ""}
+      ${S.mode === "mcp" ? `<button data-a="fullscreen">${L("Expand", "Expandir")}</button>` : ""}
+      <button data-a="lang" aria-label="Language">${S.lang === "pt-BR" ? "English" : "Português"}</button></div>`;
+  $("#nav").innerHTML = S.rid ? NAV.map(([k, en, pt]) => `<button class="tab" data-a="nav" data-v="${k}" ${S.view === k ? 'aria-current="page"' : ""}>${esc(L(en, pt))}${k === "approvals" && S.ov?.tasks?.moderator_approvals_pending ? ` <span class="pill warn">${S.ov.tasks.moderator_approvals_pending}</span>` : ""}</button>`).join("") : "";
+  $("#nav").style.display = S.rid ? "flex" : "none";
+  $("#confirmbar").innerHTML = S.pending.length && !(S.view === "screening" && S.voteTicket) ? `<div class="card"><h2>${L("Waiting for your confirmation", "Aguardando sua confirmação")}</h2><p class="small muted">${L("Nothing below is saved until you press Confirm. Check that it is exactly what you intend.", "Nada abaixo é salvo até você confirmar.")}</p>` +
+    S.pending.map((p) => `<div class="row" style="margin:6px 0"><span style="flex:1;min-width:220px">${esc(p.summary)} <span class="pill">${L("prepared via", "preparado via")} ${esc(String(p.created_channel ?? "").startsWith("mcp") ? "Claude" : L("this screen", "esta tela"))}</span> <span class="small muted">${L("expires", "expira")} ${esc(time(p.expires_at))}</span></span>
+      <button class="primary" data-a="confirm" data-id="${esc(p.confirmation_id)}" data-h="${esc(p.payload_hash)}">${L("Confirm", "Confirmar")}</button><button data-a="cancel" data-id="${esc(p.confirmation_id)}">${L("Cancel", "Cancelar")}</button></div>`).join("") + `</div>` : "";
+}
+const errBox = () => S.err ? `<div class="err" role="alert"><strong>${esc(S.err.message)}</strong> <span class="small">(${esc(S.err.code)})</span></div>` : "";
+const flashBox = () => S.flash ? `<div class="okbox" role="status">${S.flash}</div>` : "";
+const stat = (label, value, sub) => `<div class="card"><div class="small muted">${esc(label)}</div><div class="num">${esc(value ?? "—")}</div>${sub ? `<div class="small muted">${esc(sub)}</div>` : ""}</div>`;
+const obj = (o) => `<dl class="kv">${Object.entries(o ?? {}).map(([k, v]) => `<dt>${esc(k.replace(/_/g, " "))}</dt><dd>${esc(typeof v === "object" && v !== null ? JSON.stringify(v) : v ?? "—")}</dd>`).join("")}</dl>`;
+
+const V = {
+  signin: () => `<div class="card" style="max-width:420px"><h2>${S.consent ? L("Sign in to continue", "Entre para continuar") : L("Sign in to Review Studio", "Entrar no Review Studio")}</h2>
+    <p class="small muted">${L("Each person uses their own Review Studio account. Access to a review needs an invitation from the moderator.", "Cada pessoa usa a própria conta. O acesso a uma revisão depende de convite do moderador.")}</p>
+    <label for="em">Email</label><input id="em" type="email" autocomplete="username" style="width:100%">
+    <label for="pw">${L("Password", "Senha")}</label><input id="pw" type="password" autocomplete="current-password" style="width:100%">
+    <div class="row" style="margin-top:12px"><button class="primary" data-a="signin">${L("Sign in", "Entrar")}</button><button data-a="signup">${L("Create account", "Criar conta")}</button></div></div>`,
+  consent: () => { const c = S.consent?.details; if (!c) return `<p class="muted">${L("Loading the request…", "Carregando o pedido…")}</p>`;
+    let host = ""; try { host = new URL(c.redirect_uri).hostname; } catch { host = ""; }
+    const trusted = host === "claude.ai" || host.endsWith(".claude.ai") || host === "claude.com" || host.endsWith(".claude.com") || host === "localhost" || host === "127.0.0.1";
+    return `<div class="card" style="max-width:520px"><h2>${L("Allow this app to use your Review Studio account?", "Permitir que este app use sua conta do Review Studio?")}</h2>
+      ${obj({ app: c.client?.name ?? c.client?.client_name ?? "(unnamed)", returns_to: c.redirect_uri, your_account: c.user?.email, requested: c.scope || "basic access" })}
+      ${trusted ? `<p>${L("If you approve, this app can act in Review Studio as you: read what you may read and prepare actions. Votes and approvals still need your confirmation on screen.", "Se aprovar, este app poderá agir como você no Review Studio. Votos e aprovações continuam exigindo sua confirmação na tela.")}</p>
+      <div class="row"><button class="primary" data-a="consent" data-d="approve">${L("Allow", "Permitir")}</button><button data-a="consent" data-d="deny">${L("Deny", "Negar")}</button></div>`
+      : `<div class="err">${L("This request does not return to Claude. Review Studio only approves Claude (claude.ai or Claude on your own computer). If you did not start this, deny it.", "Este pedido não retorna ao Claude. Negue se você não o iniciou.")}</div><button data-a="consent" data-d="deny">${L("Deny", "Negar")}</button>`}</div>`; },
+  portfolio: () => `<h2>${L("Your reviews", "Suas revisões")}</h2>${(S.me?.reviews ?? []).length ? `<div class="grid">${S.me.reviews.map((r) => `<div class="card"><div class="small muted">${esc(r.code)} · ${esc(r.status)}${r.is_synthetic ? " · SYNTHETIC" : ""}</div><div style="font-weight:600;margin:4px 0">${esc(r.title)}</div>
+      <div class="small muted">${L("Your rights", "Seus direitos")}: ${esc((r.capabilities ?? []).join(", ") || (S.me.is_principal_moderator ? L("moderator", "moderador") : "—"))}</div><div class="small"><code>${esc(r.review_id)}</code></div>
+      <button class="primary" style="margin-top:8px" data-a="open" data-id="${esc(r.review_id)}">${L("Open", "Abrir")}</button></div>`).join("")}</div>`
+    : `<div class="card"><p>${L("You have no reviews yet.", "Você ainda não tem revisões.")}</p><p class="small muted">${S.me?.is_principal_moderator ? L("Create one from the conversation where the protocol was approved: ask Claude to “prepare this review for screening in Review Studio using the approved protocol”.", "Crie uma a partir da conversa do protocolo aprovado.") : L("Ask the moderator for an invitation code, then enter it below.", "Peça um código de convite ao moderador.")}</p></div>`}
+    ${S.me && !S.me.workspace?.moderator_set ? `<div class="note">${L("The workspace has no principal moderator yet. This is a one-time setup step done outside the app.", "O workspace ainda não tem moderador principal.")}</div>` : ""}
+    <div class="card" style="max-width:520px"><h3 style="margin-top:0">${L("Accept an invitation", "Aceitar um convite")}</h3><label for="inv">${L("One-time invitation code", "Código de convite")}</label><input id="inv" style="width:100%" autocomplete="off">
+      <button style="margin-top:8px" data-a="redeem">${L("Accept invitation", "Aceitar convite")}</button></div>
+    <p class="small muted">${L("Signed in as", "Conectado como")} ${esc(S.me?.email ?? "")} · ${esc(S.mode === "mcp" ? L("inside Claude", "dentro do Claude") : L("browser session", "sessão do navegador"))}${S.mode === "web" ? ` · <button data-a="signout">${L("Sign out", "Sair")}</button>` : ""}</p>`,
+  overview: () => { const o = S.ov; if (!o) return ""; const st = (k, name) => { const s = o.stages?.[k]; if (!s) return ""; const d = s.final_team_dispositions ?? {};
+      return `<div class="card"><h2>${esc(name)}</h2><p class="small muted">${L("Unit", "Unidade")}: ${esc(s.unit)} · ${L("denominator", "denominador")}: ${esc(s.denominator)}</p>
+        <h3>${L("Your personal work", "Seu trabalho pessoal")}</h3>${s.you.has_screening_right ? obj({ voted: s.you.voted, still_to_vote: s.you.still_to_vote }) : `<p class="small muted">${L("You do not screen this stage.", "Você não tria esta etapa.")}</p>`}
+        <h3>${L("Team submissions", "Envios da equipe")}</h3>${obj({ personal_votes_saved: s.team_submissions.personal_votes_saved, votes_needed: s.team_submissions.votes_needed })}
+        ${s.team_submissions.by_member ? `<p class="small muted">${s.team_submissions.by_member.map((m) => esc(m.member) + ": " + esc(m.votes)).join(" · ")}</p>` : ""}
+        <h3>${L("Final team dispositions", "Disposições finais da equipe")}</h3>${obj(d)}
+        ${s.unresolved_conflicts !== null && s.unresolved_conflicts !== undefined ? `<p>${L("Unresolved conflicts", "Conflitos não resolvidos")}: <strong>${esc(s.unresolved_conflicts)}</strong></p>` : ""}</div>`; };
+    return `${o.status === "draft" ? `<div class="note">${L("This review is a draft handoff. Nothing is active.", "Esta revisão é um rascunho.")} ${isMod() ? `<button data-a="activate">${L("Prepare activation", "Preparar ativação")}</button>` : ""}</div>` : ""}
+      <p class="small muted">${esc(o.note)}</p><div class="grid">${st("ta", L("Title/abstract screening", "Triagem de título/resumo"))}${st("ft", L("Full-text assessment", "Avaliação de texto completo"))}
+      <div class="card"><h2>${L("Imports and duplicates", "Importações e duplicatas")}</h2>${obj(o.imports)}</div>
+      <div class="card"><h2>${L("Tasks", "Tarefas")}</h2>${obj({ your_pending_confirmations: o.tasks.your_pending_confirmations, moderator_approvals_pending: o.tasks.moderator_approvals_pending ?? "—", your_requests_pending: o.tasks.your_requests_pending })}
+        ${(o.tasks.open_tasks ?? []).map((t) => `<p class="small">• ${esc(t.title)}</p>`).join("")}</div>
+      <div class="card"><h2>${L("Current analysis release", "Release de análise atual")}</h2><p class="muted">${esc(o.analysis_release?.note)}</p></div></div>`; },
+  protocol: () => { const r = S.data.review, c = S.crit; if (!r || !c) return ""; const act = c.criteria.filter((x) => x.is_active), prop = c.criteria.filter((x) => !x.is_active);
+    const row = (x) => `<tr><td><strong>${esc(x.code)}</strong></td><td>${esc(x.kind)}</td><td>${esc(x.stage)}</td><td>${esc(x.text)}${x.rationale ? `<div class="small muted">${esc(x.rationale)}</div>` : ""}</td><td class="small">v${esc(x.version)} · id ${esc(x.criterion_version_id)}</td></tr>`;
+    return `<div class="grid"><div class="card"><h2>${L("Approved protocol", "Protocolo aprovado")}</h2>${obj({ version: r.protocol?.label, status: r.protocol?.status, source: r.protocol?.source_ref, checksum: String(r.protocol?.content_sha256 ?? "").slice(0, 12) })}</div>
+      <div class="card"><h2>${L("Registration", "Registro")}</h2>${obj(r.registration)}<p class="small muted">${L("Recorded as stated with evidence. Drafted or submitted is not confirmed.", "Rascunho ou submetido não é confirmado.")}</p></div>
+      <div class="card"><h2>${L("Review policy", "Política da revisão")} v${esc(r.policy_version)}</h2>${obj(r.policy)}</div></div>
+      <div class="card"><h2>${L("Protocol content", "Conteúdo do protocolo")}</h2><pre>${esc(JSON.stringify(r.protocol_content ?? {}, null, 2))}</pre></div>
+      <div class="card"><h2>${L("Active criteria", "Critérios ativos")}</h2><table><tr><th>Code</th><th>Kind</th><th>Stage</th><th>Text</th><th>Version</th></tr>${act.map(row).join("") || `<tr><td colspan="5" class="muted">${L("None active yet.", "Nenhum ativo.")}</td></tr>`}</table></div>
+      <div class="card"><h2>${L("Proposed criteria — inactive", "Critérios propostos — inativos")}</h2><p class="small muted">${L("These do not affect eligibility until the moderator activates them as a protocol amendment.", "Não afetam a elegibilidade até o moderador ativar.")}</p>
+        <table>${prop.map(row).join("") || `<tr><td class="muted">${L("No proposals.", "Sem propostas.")}</td></tr>`}</table>
+        <h3>${L("Propose a criterion", "Propor critério")}</h3><div class="row"><select id="pc_kind" aria-label="Kind"><option>exclude</option><option>include</option></select><select id="pc_stage" aria-label="Stage"><option>both</option><option>ta</option><option>ft</option></select></div>
+        <label for="pc_text">${L("Wording", "Redação")}</label><textarea id="pc_text"></textarea><label for="pc_rat">${L("Rationale", "Justificativa")}</label><input id="pc_rat" style="width:100%"><button style="margin-top:8px" data-a="propcrit">${L("Propose criterion", "Propor critério")}</button></div>
+      <div class="card"><h2>${L("Exclusion-reason labels", "Rótulos de motivo de exclusão")}</h2><table><tr><th>Code</th><th>Label</th><th>Stage</th><th>${L("Expresses criterion", "Expressa o critério")}</th></tr>
+        ${c.reason_labels.map((l) => `<tr><td>${esc(l.code)}</td><td>${esc(l.label)}</td><td>${esc(l.stage)}</td><td>${esc(l.criterion_code)} <span class="small muted">(version id ${esc(l.criterion_version_id)})</span></td></tr>`).join("")}</table>
+        <h3>${L("Add a label for an active criterion", "Adicionar rótulo")}</h3><div class="row"><input id="rl_label" placeholder="${L("Label", "Rótulo")}"><select id="rl_crit" aria-label="Criterion">${act.map((x) => `<option value="${esc(x.criterion_id)}">${esc(x.code)} — ${esc(String(x.text).slice(0, 50))}</option>`).join("")}</select>
+        <select id="rl_stage" aria-label="Stage"><option>both</option><option>ta</option><option>ft</option></select><button data-a="addlabel">${L("Add label", "Adicionar")}</button></div></div>`; },
+  imports: () => { const d = S.data.sources, p = S.data.preview; if (!d) return "";
+    return `<div class="card"><h2>${L("Sources and search history", "Fontes e histórico de busca")}</h2><p class="small muted">${L("A preset records where a search was run by a person. Review Studio did not run these searches. Reported, exported and imported counts are kept separate.", "Buscas executadas por pessoas, fora do app.")}</p>
+      <table><tr><th>${L("Source", "Fonte")}</th><th>${L("Searches recorded", "Buscas registradas")}</th><th>${L("Imported occurrences", "Ocorrências importadas")}</th></tr>${d.sources.map((s) => `<tr><td><strong>${esc(s.database_name)}</strong> <span class="pill">${esc(s.preset)}</span><div class="small muted">${esc(s.platform ?? "")} · id ${esc(s.source_id)}</div></td>
+        <td>${s.search_runs.map((q) => `<div class="small">#${esc(q.search_run_id)} · ${esc(q.run_date ?? "no date")} · ${L("reported", "reportados")} ${esc(q.reported_hits ?? "—")} · ${L("exported", "exportados")} ${esc(q.exported_count ?? "—")} · ${L("imported", "importados")} ${esc(q.imported_count)}<details><summary>${L("syntax", "sintaxe")}</summary><pre>${esc(q.syntax)}</pre></details></div>`).join("") || `<span class="muted small">${L("none", "nenhuma")}</span>`}</td>
+        <td>${esc(s.occurrences)}${s.export_overlaps ? ` <span class="small muted">(+${esc(s.export_overlaps)} ${L("export overlap", "sobreposição")})</span>` : ""}</td></tr>`).join("")}</table>
+      ${has("import") || isMod() ? `<details><summary>${L("Add a source or record a search", "Adicionar fonte ou registrar busca")}</summary><div class="row" style="margin-top:8px"><select id="as_preset" aria-label="Preset">${["pubmed", "embase", "central", "scopus", "wos", "registry", "lilacs", "other", "unknown"].map((x) => `<option>${x}</option>`).join("")}</select><input id="as_name" placeholder="${L("Database name", "Nome da base")}"><input id="as_plat" placeholder="${L("Platform", "Plataforma")}"><button data-a="addsource">${L("Add source", "Adicionar fonte")}</button></div>
+        <div class="row" style="margin-top:8px"><select id="sr_src" aria-label="Source">${d.sources.map((s) => `<option value="${esc(s.source_id)}">${esc(s.database_name)}</option>`).join("")}</select><input id="sr_date" type="date" aria-label="Date run"><input id="sr_hits" type="number" placeholder="${L("Reported hits", "Resultados")}" style="width:130px"><input id="sr_exp" type="number" placeholder="${L("Exported", "Exportados")}" style="width:110px"></div>
+        <label for="sr_syntax">${L("Exact executed syntax", "Sintaxe exata executada")}</label><textarea id="sr_syntax"></textarea><button data-a="addsearch">${L("Record search", "Registrar busca")}</button></details>` : ""}</div>
+      ${has("import") || isMod() ? `<div class="card"><h2>${L("Import a RIS file", "Importar arquivo RIS")}</h2><p class="small muted">${L("The file is checked first. Nothing is imported until you commit the preview.", "Nada é importado até você confirmar a prévia.")}</p><input id="imp_file" type="file" accept=".ris,.txt" aria-label="RIS file"> <button data-a="preview">${L("Preview", "Pré-visualizar")}</button>
+        ${p ? (p.status === "duplicate_file" ? `<div class="note">${esc(p.message)}</div>` : `<h3>${L("Preview", "Prévia")}: ${esc(p.filename)}</h3>${obj({ parsed: p.counts.parsed, accepted: p.counts.accepted, rejected: p.counts.rejected, checksum_sha256: String(p.sha256).slice(0, 16) + "…", parser: p.parser_version, exporting_software: p.exporting_software ?? "unknown", original_file_stored: p.original_file?.stored ? "yes" : "NO — " + (p.original_file?.error ?? "") })}
+          <h3>${L("Fields found (of accepted rows)", "Campos encontrados")}</h3>${obj(p.field_coverage)}
+          <h3>${L("Suggested origin — not verified", "Origem sugerida — não verificada")}</h3><p>${esc(p.origin.suggestion?.preset ?? L("Unknown / needs mapping", "Desconhecida"))} <span class="pill ${p.origin.status === "conflict" ? "bad" : "warn"}">${esc(p.origin.status)}</span></p>
+          ${(p.origin.suggestion?.evidence ?? []).map((e) => `<p class="small muted">• ${esc(e)}</p>`).join("")}${(p.origin.conflicts ?? []).map((e) => `<div class="err">${esc(e.message)}</div>`).join("")}${(p.parser_warnings ?? []).map((w) => `<div class="note">${esc(w)}</div>`).join("")}
+          ${p.rejected_rows.length ? `<details><summary>${esc(p.rejected_rows.length)} ${L("rejected row(s)", "linha(s) rejeitada(s)")}</summary>${p.rejected_rows.map((r) => `<p class="small">#${esc(r.row_no)}: ${esc(r.reason)}</p>`).join("")}</details>` : ""}
+          <details><summary>${L("First records", "Primeiros registros")}</summary>${p.sample.map((r) => `<p class="small">${esc(r.title)} — ${esc((r.authors ?? [])[0] ?? "")} ${esc(r.year ?? "")} ${r.doi ? "· doi " + esc(r.doi) : ""} ${r.pmid ? "· pmid " + esc(r.pmid) : ""}</p>`).join("")}</details>
+          <div class="row" style="margin-top:8px"><label for="ic_src" style="margin:0">${L("Commit to source", "Importar para a fonte")}</label><select id="ic_src">${d.sources.map((s) => `<option value="${esc(s.source_id)}" ${s.preset === p.origin.suggestion?.preset ? "selected" : ""}>${esc(s.database_name)} (${esc(s.preset)})</option>`).join("")}</select>
+          <select id="ic_run" aria-label="Search run"><option value="">${L("no search run linked", "sem busca vinculada")}</option>${d.sources.flatMap((s) => s.search_runs.map((q) => `<option value="${esc(q.search_run_id)}">${esc(s.database_name)} #${esc(q.search_run_id)} ${esc(q.run_date ?? "")}</option>`)).join("")}</select></div>
+          <label><input type="checkbox" id="ic_conf"> ${L("I confirm this file came from the chosen source", "Confirmo a origem deste arquivo")}</label><label><input type="checkbox" id="ic_ovl"> ${L("If rows repeat an earlier export of the same source, link them (reported as export overlap, not duplicates)", "Vincular linhas repetidas da mesma fonte")}</label>
+          <div class="row" style="margin-top:8px"><button class="primary" data-a="commit" data-id="${esc(p.batch_id)}">${L("Commit import", "Confirmar importação")}</button><button data-a="discard" data-id="${esc(p.batch_id)}">${L("Discard", "Descartar")}</button></div>`) : ""}</div>` : ""}
+      <div class="card"><h2>${L("Import batches", "Lotes importados")}</h2><table><tr><th>File</th><th>Status</th><th>${L("Origin", "Origem")}</th><th>${L("Rows", "Linhas")}</th><th>SHA-256</th></tr>${d.batches.map((b) => `<tr><td>${esc(b.filename)}<div class="small muted">${esc(time(b.created_at))} · ${esc(b.parser_version)}</div></td><td>${esc(b.status)}</td><td>${esc(b.origin_status)}</td><td>${esc(b.accepted)} ${L("accepted", "aceitas")} · ${esc(b.rejected)} ${L("rejected", "rejeitadas")} · ${esc(b.export_overlaps)} ${L("overlap", "sobrepostas")}</td><td class="small"><code>${esc(String(b.sha256).slice(0, 12))}…</code></td></tr>`).join("") || `<tr><td colspan="5" class="muted">${L("No imports yet.", "Sem importações.")}</td></tr>`}</table></div>`; },
+  duplicates: () => { const d = S.data.dd, run = S.data.dry; if (!d) return ""; const can = has("import") || isMod();
+    const rec = (r) => `<div><strong>#${esc(r.seq)}</strong> ${esc(r.title)}<div class="small muted">${esc((r.authors ?? []).join("; "))} · ${esc(r.year ?? "")} · ${esc(r.journal ?? "")} · ${esc(r.ref_type ?? "")}${r.doi ? " · doi " + esc(r.doi) : ""}${r.pmid ? " · pmid " + esc(r.pmid) : ""}${r.has_abstract ? "" : " · no abstract"}</div></div>`;
+    return `<div class="grid">${stat(L("Records after duplicate removal", "Registros após duplicatas"), d.counts.canonical_records)}${stat(L("Duplicates removed", "Duplicatas removidas"), d.counts.duplicates_removed, L("counted once each", "contadas uma vez"))}${stat(L("Pairs awaiting a person", "Pares aguardando revisão"), d.counts.open_pairs_for_review)}</div>
+      <div class="card"><h2>${L("Policy", "Política")}</h2>${d.policy ? `<p>v${esc(d.policy.version)} <span class="pill ${d.policy.status === "approved" ? "ok" : "warn"}">${esc(d.policy.status)}</span></p><details><summary>${L("Rules", "Regras")}</summary><pre>${esc(JSON.stringify(d.policy.rules, null, 2))}</pre></details>` : `<p class="muted">${L("No policy yet. Automatic handling needs a policy version approved by the moderator.", "Sem política. É preciso aprovação do moderador.")}</p>`}
+        ${can ? `<div class="row"><button data-a="ddpolicy" data-x="0">${L("Propose default policy", "Propor política padrão")}</button><button data-a="ddpolicy" data-x="1">${L("Propose policy with exact-bibliographic rule", "Propor com regra bibliográfica exata")}</button><button class="primary" data-a="dryrun" ${d.policy?.status === "approved" ? "" : "disabled"}>${L("Dry-run preview", "Prévia (dry run)")}</button></div>` : ""}</div>
+      ${run ? `<div class="card"><h2>${L("Dry run", "Dry run")} #${esc(run.run_id)} — ${L("nothing changed", "nada foi alterado")}</h2>${obj({ clusters: run.clusters, records_to_remove: run.records_to_remove, pairs_for_human_review: run.pairs_for_human_review })}
+        ${(run.sample_clusters ?? []).map((c) => `<div style="border-top:1px solid var(--line);padding:6px 0"><span class="pill">${esc(c.rule)}</span>${c.records.map((r) => `<p class="small">${r.role === "keep" ? "✓ keep" : "→ merge"} #${esc(r.seq)} ${esc(r.title)} <span class="muted">${esc((r.sources ?? []).join(", "))}</span></p>`).join("")}</div>`).join("")}
+        ${run.status === "dry_run" ? `<button class="primary" data-a="ddapply" data-id="${esc(run.run_id)}" ${run.records_to_remove || Object.keys(run.pairs_for_human_review ?? {}).length ? "" : "disabled"}>${L("Apply this preview", "Aplicar esta prévia")}</button>` : `<p class="okbox">${esc(run.status)}: ${esc(JSON.stringify({ removed_now: run.removed_now, queued_for_review: run.queued_for_review, message: run.message }))}</p>`}</div>` : ""}
+      <div class="card"><h2>${L("Uncertain pairs", "Pares incertos")}</h2>${d.queue.map((q) => `<div style="border-top:1px solid var(--line);padding:8px 0"><span class="pill warn">${esc(q.reason.replace(/_/g, " "))}</span>${rec(q.a)}${rec(q.b)}
+        ${can ? `<div class="row" style="margin-top:6px"><button data-a="ddres" data-id="${esc(q.queue_id)}" data-x="merge" data-k="${esc(q.a.record_id)}">${L("Merge, keep", "Unir, manter")} #${esc(q.a.seq)}</button><button data-a="ddres" data-id="${esc(q.queue_id)}" data-x="merge" data-k="${esc(q.b.record_id)}">${L("Merge, keep", "Unir, manter")} #${esc(q.b.seq)}</button><button data-a="ddres" data-id="${esc(q.queue_id)}" data-x="keep_separate">${L("Keep separate", "Manter separados")}</button><button data-a="ddres" data-id="${esc(q.queue_id)}" data-x="link_companion">${L("Link companion reports", "Vincular relatos associados")}</button></div>` : ""}</div>`).join("") || `<p class="muted">${L("Nothing waiting.", "Nada aguardando.")}</p>`}</div>
+      <div class="card"><h2>${L("Resolution audit", "Auditoria")}</h2><table>${d.events.map((e) => `<tr><td>${esc(e.kind.replace(/_/g, " "))} <span class="small muted">${esc(e.rule ?? "")}</span></td><td class="small">${esc(e.kept_title)}</td><td class="small">${esc(time(e.at))}</td><td>${e.undone ? `<span class="pill">undone</span>` : (can && /merge/.test(e.kind) ? `<button data-a="ddundo" data-id="${esc(e.event_id)}">${L("Undo", "Desfazer")}</button>` : "")}</td></tr>`).join("") || `<tr><td class="muted">${L("No events.", "Sem eventos.")}</td></tr>`}</table></div>`; },
+  screening: () => { const q = S.queue; if (!q) return ""; const r = S.rec, labels = (S.crit?.reason_labels ?? []).filter((l) => l.stage === S.stage || l.stage === "both"); const adj = isMod() || has("adjudicate");
+    const dec = { include: S.stage === "ta" ? L("✓ Include (advance to full text)", "✓ Incluir (avançar)") : L("✓ Include", "✓ Incluir"), maybe: L("? Maybe", "? Talvez"), exclude: L("✕ Exclude", "✕ Excluir") };
+    return `<div class="row" style="margin-bottom:8px"><button class="tab" data-a="stage" data-x="ta" ${S.stage === "ta" ? 'aria-current="page"' : ""}>${L("Title/abstract", "Título/resumo")}</button><button class="tab" data-a="stage" data-x="ft" ${S.stage === "ft" ? 'aria-current="page"' : ""}>${L("Full text", "Texto completo")}</button>
+      <select id="flt" data-change="filter" aria-label="Filter">${[["todo", L("Still to vote", "A votar")], ["voted", L("My votes", "Meus votos")], ["all", L("All records", "Todos")]].concat(adj ? [["conflicts", L("Conflicts", "Conflitos")]] : []).map(([k, n]) => `<option value="${k}" ${S.filter === k ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+      <span class="small muted">${esc(q.totals.you_voted)} ${L("voted by you", "votados por você")} · ${esc(q.totals.you_still_to_vote)} ${L("still to vote", "a votar")} · ${esc(q.totals.records_at_stage)} ${L("records at this stage", "registros nesta etapa")}</span></div>
+      <p class="small muted">${esc(q.stage_meaning)}${S.stage === "ft" ? " " + L("PDF upload and AI full-text reading are not built yet; decide from the report you retrieved yourself.", "Upload de PDF ainda não disponível.") : ""}</p>
+      <div class="subtabs">${[["queue", L("Queue", "Fila")], ["record", L("Record", "Registro")], ["decision", L("Decision", "Decisão")]].map(([k, n]) => `<button class="tab" data-a="pane" data-x="${k}" ${S.pane === k ? 'aria-current="page"' : ""}>${esc(n)}</button>`).join("")}${r ? `<span class="small muted" style="align-self:center">#${esc(r.record.seq)}</span>` : ""}</div>
+      <div class="screen"><div class="card queue ${S.pane === "queue" ? "on" : ""}" data-pane>${q.items.map((i) => `<button data-a="rec" data-id="${esc(i.record_id)}" aria-current="${r && r.record.record_id === i.record_id}"><span class="small muted">#${esc(i.seq)} ${i.your_decision ? `· ${L("you", "você")}: ${esc(i.your_decision)}` : ""}${i.team_status ? ` · ${L("team", "equipe")}: ${esc(i.team_status)}` : ""}${i.retrieval ? " · not retrieved" : ""}</span><br>${esc(i.title ?? "(no title)")}<br><span class="small muted">${esc(i.first_author ?? "")} ${esc(i.year ?? "")}</span></button>`).join("") || `<p class="muted" style="padding:12px">${L("No records in this filter.", "Nenhum registro neste filtro.")}</p>`}</div>
+      <div class="card ${S.pane === "record" ? "on" : ""}" data-pane>${r ? `<div class="small muted">${esc(r.review_code)} · ${L("record", "registro")} #${esc(r.record.seq)} (id ${esc(r.record.record_id)}) · ${esc(r.record.ref_type ?? "")}</div><h2 style="margin-top:4px">${esc(r.record.title ?? "(no title)")}</h2>
+        <p class="small">${esc((r.record.authors ?? []).join("; "))}</p><p class="small muted">${esc(r.record.journal ?? "")} ${esc(r.record.year ?? "")}${r.record.doi ? " · doi " + esc(r.record.doi) : ""}${r.record.pmid ? " · pmid " + esc(r.record.pmid) : ""}</p>
+        <h3>${L("Abstract", "Resumo")}</h3><div class="abstract">${r.record.abstract ? esc(r.record.abstract) : `<span class="muted">${L("No abstract in the imported record.", "Sem resumo no registro importado.")}</span>`}</div>
+        <h3>${L("Where it came from", "Origem")}</h3>${r.sources.map((s) => `<span class="pill">${esc(s.database_name)}${s.source_record_id ? " · " + esc(s.source_record_id) : ""}${s.via_merged_record ? " · via duplicate" : ""}</span> `).join("")}` : `<p class="muted">${L("Choose a record from the queue.", "Escolha um registro na fila.")}</p>`}</div>
+      <div class="card ${S.pane === "decision" ? "on" : ""}" data-pane>${r ? `<h2>${L("Your decision", "Sua decisão")}</h2>${r.your_vote ? `<p><span class="pill ok">${L("Saved", "Salvo")}</span> ${esc(r.your_vote.decision)} · ${esc(time(r.your_vote.saved_at))}${r.your_vote.ai_assisted ? ` · ${L("AI assistance recorded", "assistência de IA registrada")}` : ""}</p>` : `<p><span class="pill">${L("Not saved", "Não salvo")}</span></p>`}
+        ${S.voteTicket ? `<div class="note"><strong>${L("You are about to save:", "Você vai salvar:")}</strong><br>${esc(S.voteTicket.summary)}<div class="row" style="margin-top:8px"><button class="primary" id="voteconfirm" data-a="voteconfirm">${L("Confirm and save", "Confirmar e salvar")}</button><button data-a="votecancel">${L("Cancel", "Cancelar")}</button></div></div>`
+        : r.you_can_vote ? `<div class="row">${["include", "maybe", "exclude"].map((d) => `<button data-a="vote" data-x="${d}">${esc(dec[d])}</button>`).join("")}</div>
+          <label for="v_reason">${L("Primary reason (for Exclude)", "Motivo principal (para Excluir)")}</label><select id="v_reason" style="width:100%"><option value="">—</option>${labels.map((l) => `<option value="${esc(l.reason_id)}">${esc(l.code)} · ${esc(l.label)}</option>`).join("")}</select><label for="v_note">${L("Note", "Nota")}</label><input id="v_note" style="width:100%">
+          ${S.stage === "ft" ? `<button style="margin-top:8px" data-a="notretrieved">${L("Mark report not retrieved", "Marcar como não recuperado")}</button>` : ""}` : `<p class="small muted">${L("You cannot vote on this record at this stage.", "Você não pode votar neste registro.")}</p>`}
+        <h3>${L("AI feedback", "Feedback de IA")}</h3>${r.ai_annotations.length ? r.ai_annotations.map((a) => `<div style="border-top:1px solid var(--line);padding:6px 0"><strong>${esc(a.display)}</strong>${a.stale ? ` <span class="pill warn">stale</span>` : ""}<div class="small muted">${esc(a.rationale ?? "")}</div>${(a.evidence ?? []).map((e) => `<p class="small">“${esc(e.excerpt)}” <span class="muted">${esc(e.locator ?? "")}</span> ${e.found_in_record_text === false ? `<span class="pill bad">${L("not found in record text", "não encontrado no texto")}</span>` : e.found_in_record_text ? `<span class="pill ok">${L("found in record", "encontrado")}</span>` : ""}</p>`).join("")}<div class="small muted">${L("A suggestion, not a vote.", "Sugestão, não voto.")}</div></div>`).join("")
+          : `<p class="small muted">${r.ai_visibility_rule === "after_own_vote" && !r.your_vote ? L("AI suggestions from others appear after you save your own vote.", "Sugestões de IA aparecem após seu voto.") : L("None.", "Nenhum.")}</p>`}
+        <h3>${L("Team", "Equipe")}</h3>${Array.isArray(r.peer_votes) ? r.peer_votes.map((p) => `<p class="small">${esc(p.reviewer)}: <strong>${esc(p.decision)}</strong>${p.note ? " — " + esc(p.note) : ""}</p>`).join("") + (r.team_status ? `<p class="small">${L("Team status", "Situação da equipe")}: <strong>${esc(r.team_status)}</strong></p>` : "")
+          + (adj && r.team_status === "conflict" ? `<h3>${L("Recommend a resolution", "Recomendar resolução")}</h3><div class="row"><select id="adj_res" aria-label="Resolution">${(S.stage === "ta" ? ["advance", "exclude"] : ["include", "exclude"]).map((x) => `<option>${x}</option>`).join("")}</select><select id="adj_reason" aria-label="Reason"><option value="">—</option>${labels.map((l) => `<option value="${esc(l.reason_id)}">${esc(l.label)}</option>`).join("")}</select></div><input id="adj_rat" placeholder="${L("Rationale", "Justificativa")}" style="width:100%;margin-top:6px"><button style="margin-top:6px" data-a="adjudicate">${L("Send to moderator approvals", "Enviar para aprovação")}</button>` : "")
+          : `<p class="small muted">${esc(r.peer_votes?.why ?? "")}</p>`}` : ""}</div></div>`; },
+  prisma: () => { const p = S.data.prisma; if (!p) return ""; const id = p.identification;
+    return `${p.is_draft ? `<div class="note">${L("Draft view: unresolved work is shown separately and no count is adjusted to close a gap.", "Rascunho: pendências aparecem separadamente.")}</div>` : ""}<p class="small muted">${esc(p.template)}</p>
+      <div class="card"><h2>${L("Identification", "Identificação")}</h2><table><tr><th>${L("Source", "Fonte")}</th><th>${L("Records identified", "Registros identificados")}</th><th>${L("Origin", "Origem")}</th><th>${L("Source-reported / exported", "Reportados / exportados")}</th></tr>${id.by_source.map((s) => `<tr><td>${esc(s.database_name)}</td><td>${esc(s.records_identified)}${s.export_overlap_linked ? ` <span class="small muted">(+${esc(s.export_overlap_linked)} overlap)</span>` : ""}</td><td>${esc((s.origin_status ?? []).join(", ") || "—")}</td><td>${esc(s.source_reported_hits ?? "—")} / ${esc(s.exported_count ?? "—")}</td></tr>`).join("")}</table>
+        ${obj({ records_identified_total: id.records_identified_total, export_overlap_reconciled: id.export_overlap_reconciled, duplicates_removed_total: id.duplicates_removed.total, automatic: id.duplicates_removed.automatic_rule_based, manual: id.duplicates_removed.manual, duplicate_pairs_awaiting_review: id.duplicate_pairs_awaiting_review })}<p class="small muted">${esc(id.duplicates_removed.counting_rule)}</p></div>
+      <div class="grid"><div class="card"><h2>${L("Screening", "Triagem")}</h2>${obj({ records_screened: p.screening.records_screened, ...p.screening.title_abstract })}<p class="small muted">${esc(p.screening.counting_rule)}</p></div>
+      <div class="card"><h2>${L("Full text", "Texto completo")}</h2>${obj(Object.fromEntries(Object.entries(p.full_text).filter(([k]) => k !== "excluded_by_primary_reason")))}${(p.full_text.excluded_by_primary_reason ?? []).length ? `<h3>${L("Excluded, by primary reason", "Excluídos, por motivo principal")}</h3><table>${p.full_text.excluded_by_primary_reason.map((r) => `<tr><td>${esc(r.code)} ${esc(r.label)}</td><td>${esc(r.reports)}</td></tr>`).join("")}</table>` : ""}</div></div>
+      <div class="card"><h2>${L("Validation", "Validação")}</h2><table>${p.validation.map((c) => `<tr><td>${c.ok ? `<span class="pill ok">✓ ${L("reconciles", "confere")}</span>` : `<span class="pill bad">✕ ${L("does not reconcile", "não confere")}</span>`}</td><td>${esc(c.check)}</td><td>${esc(c.left)} = ${esc(c.right)}</td></tr>`).join("")}</table>
+      <p class="small muted">${L("Diagram drawing (SVG/PDF) and approved snapshots are not built yet; export the ledger below.", "Diagrama e snapshots aprovados ainda não disponíveis.")}</p><button data-a="export" data-x="ledger" data-f="json">${L("Export ledger (JSON)", "Exportar ledger (JSON)")}</button></div>`; },
+  team: () => { const t = S.data.team; if (!t) return ""; const caps = ["viewer", "screen_ta", "screen_ft", "import", "extract", "check", "bias", "adjudicate", "run_analysis"];
+    return `<div class="card"><h2>${L("Members", "Membros")}</h2><table><tr><th>${L("Person", "Pessoa")}</th><th>${L("Rights", "Direitos")}</th>${isMod() ? "<th></th>" : ""}</tr>${t.members.map((m) => `<tr><td>${esc(m.display_name ?? m.email)} ${m.is_principal_moderator ? `<span class="pill ok">${L("principal moderator", "moderador principal")}</span>` : ""}${m.is_you ? ` <span class="pill">${L("you", "você")}</span>` : ""}<div class="small muted">${esc(m.email ?? "")}</div></td><td>${esc((m.capabilities ?? []).join(", ") || "—")}</td>
+        ${isMod() ? `<td><details><summary>${L("Change rights", "Alterar direitos")}</summary>${caps.map((c) => `<label><input type="checkbox" data-cap="${esc(m.user_id)}" value="${c}" ${m.capabilities.includes(c) ? "checked" : ""}> ${c}</label>`).join("")}<button data-a="grants" data-id="${esc(m.user_id)}">${L("Prepare change", "Preparar alteração")}</button></details></td>` : ""}</tr>`).join("")}</table>
+        <p class="small muted">${L("Only the moderator grants, changes or revokes rights. A moderator who also wants to screen grants themself a screening right and is then blinded like any reviewer.", "Somente o moderador concede direitos.")}</p></div>
+      ${isMod() ? `<div class="card"><h2>${L("Invite a colleague", "Convidar colega")}</h2><p class="small muted">${L("You get a one-time code to send privately. Your colleague signs in with their own account and accepts it; then you approve the membership.", "Você recebe um código de uso único para enviar em privado.")}</p>
+        <label for="iv_email">${L("Colleague's email (label only)", "E-mail do colega (apenas rótulo)")}</label><input id="iv_email" type="email" style="width:100%">${["screen_ta", "screen_ft", "import", "adjudicate", "viewer"].map((c) => `<label><input type="checkbox" data-ivcap value="${c}" ${c.startsWith("screen") ? "checked" : ""}> ${c}</label>`).join("")}<button style="margin-top:8px" data-a="invite">${L("Prepare invitation", "Preparar convite")}</button>
+        <h3>${L("Invitations", "Convites")}</h3>${(t.invitations ?? []).map((i) => `<p class="small">#${esc(i.invitation_id)} ${esc(i.email_hint ?? "")} · ${esc(i.status)} · ${esc((i.capabilities ?? []).join(", "))}</p>`).join("") || `<p class="small muted">—</p>`}</div>` : ""}`; },
+  approvals: () => { const a = S.data.approvals; if (!a) return ""; const pend = a.approvals.filter((x) => x.status === "pending"), done = a.approvals.filter((x) => x.status !== "pending");
+    return `<h2>${L("Moderator approvals", "Aprovações do moderador")}</h2>${a.you_can_decide ? "" : `<p class="small muted">${L("You see your own requests. Only the moderator decides.", "Você vê seus próprios pedidos.")}</p>`}
+      ${pend.map((x) => `<div class="card"><div class="small muted">#${esc(x.approval_id)} · ${esc(x.kind.replace(/_/g, " "))} · ${L("requested by", "pedido por")} ${esc(x.requested_by ?? "")} ${L("via", "via")} ${esc(String(x.requested_channel ?? "").startsWith("mcp") ? "Claude" : L("screen", "tela"))} · ${esc(time(x.requested_at))}</div><h2 style="margin-top:4px">${esc(x.title)}</h2>
+        <h3>${L("Exact request", "Pedido exato")}</h3><pre>${esc(JSON.stringify(x.payload, null, 2))}</pre>${Object.keys(x.evidence ?? {}).length ? `<h3>${L("Evidence", "Evidência")}</h3><pre>${esc(JSON.stringify(x.evidence, null, 2))}</pre>` : ""}${Object.keys(x.impact ?? {}).length ? `<h3>${L("Impact", "Impacto")}</h3><pre>${esc(JSON.stringify(x.impact, null, 2))}</pre>` : ""}
+        ${a.you_can_decide ? `<input id="ap_reason_${esc(x.approval_id)}" placeholder="${L("Reason (needed to decline or request changes)", "Motivo (para recusar ou pedir mudanças)")}" style="width:100%"><div class="row" style="margin-top:8px"><button class="primary" data-a="decide" data-id="${esc(x.approval_id)}" data-x="approve">${L("Approve", "Aprovar")}</button><button data-a="decide" data-id="${esc(x.approval_id)}" data-x="request_changes">${L("Request changes", "Pedir mudanças")}</button><button data-a="decide" data-id="${esc(x.approval_id)}" data-x="decline">${L("Decline", "Recusar")}</button></div>` : ""}</div>`).join("") || `<div class="card muted">${L("Nothing is waiting.", "Nada aguardando.")}</div>`}
+      <details><summary>${L("Decided", "Decididos")} (${done.length})</summary><table>${done.map((x) => `<tr><td>#${esc(x.approval_id)}</td><td>${esc(x.title)}</td><td>${esc(x.status)}</td><td class="small">${esc(x.decision_reason ?? "")}</td><td class="small">${esc(time(x.decided_at))}</td></tr>`).join("")}</table></details>`; },
+  activity: () => { const a = S.data.audit; if (!a) return "";
+    return `<div class="card"><h2>${L("Export", "Exportar")}</h2><p class="small muted">${L("Exports carry stable IDs and a manifest. Team votes are available only to the moderator or an unblinded adjudicator.", "Exportações com IDs estáveis e manifesto.")}</p><div class="row">${[["references", "csv"], ["my_votes", "csv"], ["team_votes", "csv"], ["criteria", "csv"], ["duplicates", "csv"], ["ledger", "json"]].map(([k, f]) => `<button data-a="export" data-x="${k}" data-f="${f}">${esc(k.replace(/_/g, " "))} (.${f})</button>`).join("")}</div>
+      ${S.data.exported ? `<p class="small">${esc(S.data.exported.filename)} — ${esc(S.data.exported.manifest.row_count)} ${L("rows", "linhas")}. ${L("If no download started, copy from here:", "Se o download não iniciou, copie daqui:")}</p><textarea readonly aria-label="Export content" style="min-height:140px">${esc(S.data.exported.text.slice(0, 200000))}</textarea>` : ""}</div>
+      <div class="card"><h2>${L("Activity", "Atividade")}</h2><table>${a.events.map((e) => `<tr><td class="small">${esc(time(e.at))}</td><td>${esc(e.actor ?? "")}</td><td>${esc(String(e.action).replace(/_/g, " "))}</td><td class="small muted">${esc(e.target_type ?? "")} ${esc(e.target_id ?? "")} · ${esc(String(e.channel ?? "").startsWith("mcp") ? "via Claude" : "screen")}</td></tr>`).join("")}</table></div>`; },
+  later: () => `<div class="card"><h2>${L("Not built yet", "Ainda não disponível")}</h2><p>${L("These sections belong to later releases and do nothing today:", "Estas seções pertencem a versões futuras:")}</p><ul><li>${L("Full texts: PDF upload, page-level AI feedback", "Textos completos: upload de PDF")}</li><li>${L("Extraction and checking", "Extração e conferência")}</li><li>${L("Bias and certainty (RoB 2, ROBINS-I, GRADE)", "Viés e certeza")}</li><li>${L("R analyses, figures and tables", "Análises no R, figuras e tabelas")}</li><li>${L("Reporting and revisions, Word annex, archive", "Relatório e revisões")}</li></ul><p class="small muted">${L("Until then, use a frozen export and your existing R workflow; record that work as done outside the app.", "Até lá, use exportações e seu fluxo atual no R.")}</p></div>`,
+  connections: () => `<div class="card"><h2>${L("This connection", "Esta conexão")}</h2>${obj({ signed_in_as: S.me?.email, role: S.me?.is_principal_moderator ? "principal moderator" : "member", used_from: S.mode === "mcp" ? "inside Claude (connector)" : "browser session", channel_seen_by_server: S.me?.channel, human_confirmations_accepted_from: S.me?.workspace?.confirmation_channel, data_schema: S.me?.workspace?.schema_version, screen_version: VERSION })}
+    <p class="small muted">${L("Each person connects their own Claude to Review Studio and signs in with their own account. Your Drive, Gmail, local folders and R session are not shared with the app or with colleagues.", "Cada pessoa conecta o próprio Claude e a própria conta.")}</p>
+    <p class="small muted">${L("Not connected: reference databases, PDF storage, R workers, Reddit, calendar. Searches are run by you and imported as files.", "Não conectados: bases de referência, PDFs, R.")}</p>${S.mode === "web" ? `<button data-a="signout">${L("Sign out", "Sair")}</button>` : ""}</div>`,
+};
+function render() {
+  renderChrome();
+  let view = S.view;
+  if (S.mode === "web" && !S.session) view = "signin";
+  else if (S.consent) view = "consent";
+  else if (!S.rid && view !== "connections") view = "portfolio";
+  $("#main").innerHTML = errBox() + flashBox() + (V[view] ? V[view]() : "");
+  if (S.voteTicket) $("#voteconfirm")?.focus();
+}
+
+/* ---------- actions ---------- */
+const val = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+async function prepare(tool, args) { // propose_* → ticket shown in the confirmation bar
+  await guard(async () => { const t = await call(tool, args); if (t?.status === "awaiting_human_confirmation") { await refreshPending(); S.flash = esc(L("Prepared. Review it in the box at the top and confirm.", "Preparado. Revise e confirme no topo.")); } else S.flash = esc(t?.next_step ?? t?.status ?? "Done"); });
+}
+async function loadConsent() {
+  await guard(async () => {
+    const r = await fetch(SB + "/auth/v1/oauth/authorizations/" + encodeURIComponent(S.consent.id), { headers: { apikey: KEY, Authorization: "Bearer " + (await token()) } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw { code: j.error_code || "consent_error", message: j.msg || j.message || "This authorization request is not valid or has expired. Start again from Claude." };
+    if (j.redirect_url) { location.assign(j.redirect_url); return; }
+    S.consent.details = j;
+  });
+}
+const A = {
+  nav: (d) => show(d.v), reload, portfolio: () => { S.rid = null; S.ov = null; show("portfolio"); }, open: (d) => openReview(d.id),
+  lang: async () => { S.lang = S.lang === "pt-BR" ? "en" : "pt-BR"; render(); try { await call("set_profile", { locale: S.lang }, true); } catch { /* preference stays local */ } },
+  fullscreen: () => hostSend("ui/request-display-mode", { mode: "fullscreen" }).catch(() => {}),
+  signin: () => guard(async () => { keepSession(await auth("token?grant_type=password", { email: val("em"), password: document.getElementById("pw").value })); if (S.consent) return loadConsent(); S.me = await call("whoami", {}, true); S.lang = S.me.locale || "en"; }),
+  signup: () => guard(async () => { const j = await auth("signup?redirect_to=" + encodeURIComponent(location.origin + location.pathname), { email: val("em"), password: document.getElementById("pw").value });
+    if (j.access_token) { keepSession(j); S.me = await call("whoami", {}, true); } else S.flash = esc(L("Account created. Open the confirmation link sent to your email, then sign in here.", "Conta criada. Abra o link de confirmação enviado por e-mail.")); }),
+  signout: () => { saveSession(null); S.me = null; S.rid = null; S.ov = null; render(); },
+  consent: (d) => guard(async () => { const r = await fetch(SB + "/auth/v1/oauth/authorizations/" + encodeURIComponent(S.consent.id) + "/consent", { method: "POST", headers: { apikey: KEY, Authorization: "Bearer " + (await token()), "Content-Type": "application/json" }, body: JSON.stringify({ action: d.d }) });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw { code: "consent_error", message: j.msg || j.message || "The decision could not be saved." }; if (j.redirect_url) location.assign(j.redirect_url); else S.flash = esc(L("Done. You can close this tab.", "Concluído.")); }),
+  redeem: () => guard(async () => { const r = await call("redeem_invitation", { invite_code: val("inv") }); S.flash = esc(r.next_step); }),
+  activate: () => prepare("propose_activation", { review_id: S.rid }),
+  confirm: (d) => guard(async () => { const r = await call("confirm", { confirmation_id: d.id, payload_hash: d.h }); const res = r.result ?? {};
+    S.flash = `<strong>${esc(L("Saved.", "Salvo."))}</strong> ` + (res.invite_token ? `${esc(L("One-time invitation code — copy it now, it is not shown again:", "Código de convite — copie agora:"))}<pre>${esc(res.invite_token)}</pre>${esc(res.note ?? "")}` : `<span class="small">${esc(JSON.stringify(res))}</span>`);
+    S.ov = null; const f = S.flash; await show(S.view); S.flash = f; render(); }),
+  cancel: (d) => guard(async () => { await call("cancel_confirmation", { confirmation_id: d.id }); await refreshPending(); }),
+  propcrit: () => guard(async () => { const r = await call("propose_criterion", { review_id: S.rid, kind: val("pc_kind"), stage: val("pc_stage"), text: val("pc_text"), rationale: val("pc_rat") || undefined }); await LOADERS.protocol(); S.flash = esc(r.next_step); }),
+  addlabel: () => guard(async () => { const r = await call("create_reason_label", { review_id: S.rid, stage: val("rl_stage"), label: val("rl_label"), criterion_id: Number(val("rl_crit")) }); await LOADERS.protocol(); S.flash = esc(r.status === "reused_existing" ? L("An equivalent label already exists; it was reused.", "Rótulo equivalente reutilizado.") : L("Label created.", "Rótulo criado.")); }),
+  addsource: () => guard(async () => { await call("add_source", { review_id: S.rid, preset: val("as_preset"), database_name: val("as_name") || val("as_preset"), platform: val("as_plat") || undefined }); await LOADERS.imports(); }),
+  addsearch: () => guard(async () => { await call("add_search_run", { review_id: S.rid, source_id: Number(val("sr_src")), run_date: val("sr_date") || undefined, syntax: val("sr_syntax"), reported_hits: val("sr_hits") ? Number(val("sr_hits")) : undefined, exported_count: val("sr_exp") ? Number(val("sr_exp")) : undefined }); await LOADERS.imports(); }),
+  preview: () => guard(async () => { const f = document.getElementById("imp_file").files[0]; if (!f) throw { code: "no_file", message: L("Choose a file first.", "Escolha um arquivo.") };
+    const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1] ?? ""); fr.onerror = () => rej({ code: "read_failed", message: "The file could not be read." }); fr.readAsDataURL(f); });
+    S.data.preview = await call("import_preview", { review_id: S.rid, filename: f.name, content_base64: b64 }); }),
+  commit: (d) => guard(async () => { const r = await call("import_commit", { batch_id: Number(d.id), source_id: Number(val("ic_src")), search_run_id: val("ic_run") ? Number(val("ic_run")) : undefined, origin_confirmed: document.getElementById("ic_conf").checked, ack_overlap: document.getElementById("ic_ovl").checked });
+    S.data.preview = null; S.ov = null; await LOADERS.imports(); S.flash = esc(L("Imported", "Importado") + `: ${r.new_records} ` + L("new records", "novos registros") + `, ${r.export_overlaps_linked} ` + L("export-overlap rows linked", "linhas sobrepostas vinculadas") + `. ` + L("Origin", "Origem") + `: ${r.origin_status}.`); }),
+  discard: (d) => guard(async () => { await call("import_discard", { batch_id: Number(d.id) }); S.data.preview = null; }),
+  ddpolicy: (d) => guard(async () => { const r = await call("propose_dedup_policy", { review_id: S.rid, exact_bibliographic: d.x === "1" }); await LOADERS.duplicates(); S.flash = esc(L("Policy proposed; it needs moderator approval", "Política proposta; precisa de aprovação") + ` (#${r.approval_id}).`); }),
+  dryrun: () => guard(async () => { S.data.dry = await call("dedup_dry_run", { review_id: S.rid }); }),
+  ddapply: (d) => guard(async () => { S.data.dry = { ...S.data.dry, ...(await call("dedup_apply", { run_id: Number(d.id) })) }; S.ov = null; await LOADERS.duplicates(); }),
+  ddres: (d) => guard(async () => { await call("dedup_resolve", { queue_id: Number(d.id), action: d.x, keep_record_id: d.k ? Number(d.k) : undefined }); S.ov = null; await LOADERS.duplicates(); }),
+  ddundo: (d) => guard(async () => { await call("dedup_undo", { event_id: Number(d.id) }); S.ov = null; await LOADERS.duplicates(); }),
+  stage: (d) => { S.stage = d.x; S.rec = null; S.voteTicket = null; show("screening"); },
+  pane: (d) => { S.pane = d.x; render(); },
+  rec: (d) => guard(async () => { S.voteTicket = null; S.rec = await call("get_record", { review_id: S.rid, record_id: Number(d.id), stage: S.stage }, true); S.pane = "record"; }),
+  vote: (d) => guard(async () => { const reason = val("v_reason"); if (d.x === "exclude" && S.stage === "ft" && !reason) throw { code: "primary_reason_required", message: L("Choose the primary reason for a full-text exclusion.", "Escolha o motivo principal.") };
+    S.voteTicket = await call("propose_vote", { review_id: S.rid, record_id: S.rec.record.record_id, stage: S.stage, decision: d.x, primary_reason_id: d.x === "exclude" && reason ? Number(reason) : undefined, note: val("v_note") || undefined }); S.status = ""; S.pane = "decision"; }),
+  votecancel: () => guard(async () => { await call("cancel_confirmation", { confirmation_id: S.voteTicket.confirmation_id }, true); S.voteTicket = null; }),
+  voteconfirm: () => guard(async () => { const t = S.voteTicket; await call("confirm", { confirmation_id: t.confirmation_id, payload_hash: t.payload_hash }); S.voteTicket = null;
+    const cur = S.rec.record.record_id; await LOADERS.screening(); const next = S.queue.items.find((i) => i.record_id !== cur && !i.your_decision && i.you_can_vote);
+    S.rec = await call("get_record", { review_id: S.rid, record_id: (S.filter === "todo" && next ? next.record_id : cur), stage: S.stage }, true); S.pane = "record"; S.flash = esc(L("Vote saved.", "Voto salvo.")); }),
+  notretrieved: () => guard(async () => { const r = await call("mark_retrieval", { review_id: S.rid, record_id: S.rec.record.record_id, not_retrieved: true, note: val("v_note") || undefined }); await LOADERS.screening(); S.rec = null; S.flash = esc(r.note); }),
+  adjudicate: () => guard(async () => { const r = await call("recommend_adjudication", { review_id: S.rid, record_id: S.rec.record.record_id, stage: S.stage, resolution: val("adj_res"), primary_reason_id: val("adj_reason") ? Number(val("adj_reason")) : undefined, rationale: val("adj_rat") || undefined }); S.flash = esc(L("Recommendation sent to moderator approvals", "Recomendação enviada") + ` (#${r.approval_id}).`); }),
+  invite: () => prepare("propose_invitation", { review_id: S.rid, email_hint: val("iv_email") || undefined, capabilities: [...document.querySelectorAll("[data-ivcap]:checked")].map((x) => x.value) }),
+  grants: (d) => { const boxes = [...document.querySelectorAll(`[data-cap="${CSS.escape(d.id)}"]`)]; const m = S.data.team.members.find((x) => x.user_id === d.id);
+    prepare("propose_grant_change", { review_id: S.rid, user_id: d.id, grant: boxes.filter((b) => b.checked && !m.capabilities.includes(b.value)).map((b) => b.value), revoke: boxes.filter((b) => !b.checked && m.capabilities.includes(b.value)).map((b) => b.value) }); },
+  decide: (d) => prepare("propose_approval_decision", { approval_id: Number(d.id), decision: d.x, reason: val("ap_reason_" + d.id) || undefined }),
+  export: (d) => guard(async () => { const r = await call("export", { review_id: S.rid, kind: d.x, format: d.f }); S.data.exported = r; if (S.view !== "activity") S.view = "activity", await LOADERS.activity();
+    try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([r.text], { type: r.format === "csv" ? "text/csv" : "application/json" })); a.download = r.filename; document.body.appendChild(a); a.click(); a.remove(); } catch { /* copy box is the fallback */ } }),
+};
+document.addEventListener("click", (e) => { const el = e.target.closest("[data-a]"); if (el && !el.disabled && A[el.dataset.a]) { e.preventDefault(); A[el.dataset.a](el.dataset); } });
+document.addEventListener("change", (e) => { if (e.target.dataset?.change === "filter") { S.filter = e.target.value; S.rec = null; show("screening"); } });
+boot();
+</script>
+</body>
+</html>

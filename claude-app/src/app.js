@@ -105,8 +105,15 @@ const P = (() => {
   function risEntry(f, raw) {
     const g = (...t) => { for (const x of t) if (f[x] && f[x][0]) return f[x][0]; return null; };
     const an = g("AN"), db = (g("DB") || "").toLowerCase();
-    const pmid = an && /^\d+$/.test(an) && (db.includes("pubmed") || db.includes("medline")) ? an : null;
-    return finish(f, g("TI", "T1"), g("AB", "N2"), [...(f.AU || []), ...(f.A1 || [])], g("PY", "Y1", "DA"), g("T2", "JO", "JF", "JA"), g("DO"), pmid, RIS_KIND[(g("TY") || "").toUpperCase()] || "other", raw);
+    let pmid = an && /^\d+$/.test(an) && (db.includes("pubmed") || db.includes("medline")) ? an : null;
+    // Embase.com puts the MEDLINE PMID in C5; Cochrane CENTRAL lists "PUBMED <id>" in C3.
+    const c5 = g("C5"), dbs = (f.DB || []).join(" ").toLowerCase();
+    if (!pmid && c5 && /^\d+$/.test(c5) && dbs.includes("embase")) pmid = c5;
+    const c3 = (f.C3 || []).join(",").match(/PUBMED\s+(\d+)/i);
+    if (!pmid && c3) pmid = c3[1];
+    const m3 = (g("M3") || "").toLowerCase();
+    const kind = /conference (abstract|paper)|^conference/.test(m3) ? "conference" : RIS_KIND[(g("TY") || "").toUpperCase()] || "other";
+    return finish(f, g("TI", "T1"), g("AB", "N2"), [...(f.AU || []), ...(f.A1 || [])], g("PY", "Y1", "DA"), g("T2", "JO", "JF", "JA"), g("DO"), pmid, kind, raw);
   }
   function bibtex(text) {
     const entries = [], failures = []; let i = 0;

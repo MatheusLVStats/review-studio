@@ -387,6 +387,7 @@ function subscribeReview(rid) {
   sub(S.db.collection(base + "/imports").orderBy("at"), (snap) => { S.imports = snap.docs.map((d) => ({ id: d.id, ...d.data() })); render(); });
   sub(S.db.collection(base + "/members"), (snap) => { S.members = Object.fromEntries(snap.docs.map((d) => [d.id, d.data()])); resolveNames(); watchReleases(); render(); });
   sub(S.db.doc(base + "/meta/dedup"), (d) => { S.dedup = d.exists ? d.data() : { candidates: [], log: [] }; render(); });
+  sub(S.db.doc(base + "/meta/dedupstaged"), (d) => { S.dedupStaged = d.exists ? d.data() : null; render(); });
   sub(S.db.doc(base + "/meta/staged"), (d) => { S.staged = d.exists ? d.data().files || [] : []; render(); });
   sub(S.db.doc(base + "/meta/retrieval"), (d) => { S.retrieval = d.exists ? d.data().map || {} : {}; render(); });
   for (const st of Object.keys(STAGES)) {
@@ -556,6 +557,31 @@ async function autoMerge() {
   const idx = (S.dedup.candidates || []).map((c, i) => [c, i]).filter(([c]) => c.status === "open" && c.score >= 1 && !c.blockers.length).map(([, i]) => i);
   for (const i of idx) await decideCandidate(i, "merge");
   say(`${idx.length} exact DOI/PMID pairs merged. Each merge can be undone.`);
+}
+// Claude's duplicate decisions arrive as proposals on each candidate pair; applying them writes every merge at once.
+const tsum = (t) => { let x = 0; for (const ch of P.normTitle(t)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x.toString(16); };
+async function applyProposals() {
+  if (!(S.dedup.candidates || []).length && S.dedupStaged) {   // decisions too large to send through chat arrive as a page asset
+    try { const r = await fetch("/_blob/" + S.dedupStaged.asset); if (!r.ok) throw new Error("could not load Claude's decisions (" + r.status + ")"); S.dedup = await r.json(); await saveDedup(S.dedup); }
+    catch (e) { return say(String(e.message || e), true); }
+  }
+  const cands = (S.dedup.candidates || []).map((c) => ({ ...c }));
+  const todo = cands.filter((c) => c.status === "open" && c.proposal);
+  const bad = todo.filter((c) => (c.ta && tsum((S.pubs[c.a] || {}).title) !== c.ta) || (c.tb && tsum((S.pubs[c.b] || {}).title) !== c.tb));
+  if (bad.length) return say(`${bad.length} decisions point at records whose titles do not match; nothing was applied.`, true);
+  const parent = {}; const find = (x) => { let r = rootOf(x); while (parent[r]) r = parent[r]; return r; };
+  for (const c of todo.filter((c) => c.proposal.action === "merge")) { const a = find(c.a), b = find(c.b); if (a !== b) parent[a < b ? b : a] = a < b ? a : b; }
+  const changes = {};
+  for (const pid of Object.keys(parent)) changes[pid] = { mergedInto: find(pid) };
+  const now = nowIso();
+  for (const c of todo) { c.status = c.proposal.action === "merge" ? "merged" : "not duplicates"; c.by = c.proposal.by || "claude"; c.at = now; }
+  try {
+    say(`Applying ${todo.length} duplicate decisions…`);
+    await savePubs(changes);
+    await saveDedup({ candidates: cands, log: [...(S.dedup.log || []), { at: now, by: S.uid, action: "apply Claude's duplicate decisions", merged: Object.keys(changes).length, pairs: todo.length }] });
+    await audit(S.rid, "apply duplicate decisions", { pairs: todo.length, merged: Object.keys(changes).length });
+    say(`Done: ${Object.keys(changes).length} records merged into their duplicates, ${todo.filter((c) => c.proposal.action !== "merge").length} pairs kept apart. Each merge can be undone.`);
+  } catch (e) { say(dbErr(e), true); }
 }
 async function unmerge(pid) {
   try { await savePubs({ [pid]: { mergedInto: null } }); await saveDedup({ ...S.dedup, log: [...(S.dedup.log || []), { at: nowIso(), by: S.uid, action: "undo merge", pid }] }); say("Merge undone."); }
@@ -811,6 +837,19 @@ function memberPicker() {
     S.members[CLAUDE] ? null : h("button", { type: "button", class: "quiet", onclick: () => addMember(CLAUDE, "reviewer") }, "Add Claude (AI) as reviewer"));
 }
 
+function dedupSummary() {
+  const all = S.dedup.candidates || []; if (!all.length) return null;
+  const n = (st) => all.filter((c) => c.status === st).length;
+  const done = all.filter((c) => c.status !== "open" && c.proposal);
+  return h("div", {}, h("p", { class: "note" }, `${all.length} pairs checked · ${n("merged")} merged · ${n("not duplicates")} not duplicates · ${n("open")} unresolved`),
+    done.length ? h("details", {}, h("summary", {}, `Claude's decisions with reasons (${done.length})`),
+      h("table", {}, h("thead", {}, h("tr", {}, ["Publication A", "Publication B", "Similarity", "Decision", "Reason"].map((x) => h("th", {}, x)))),
+        h("tbody", {}, done.map((c) => h("tr", {},
+          h("td", {}, (S.pubs[c.a] || {}).title || c.a, h("div", { class: "note" }, `${(S.pubs[c.a] || {}).year || ""} · ${(S.pubs[c.a] || {}).file || ""}`)),
+          h("td", {}, (S.pubs[c.b] || {}).title || c.b, h("div", { class: "note" }, `${(S.pubs[c.b] || {}).year || ""} · ${(S.pubs[c.b] || {}).file || ""}`)),
+          h("td", { class: "num" }, c.similarity != null ? c.similarity + "%" : ""), h("td", {}, c.status), h("td", { class: "note" }, c.proposal.reason)))))) : null);
+}
+
 function importTab() {
   const cands = (S.dedup.candidates || []).map((c, i) => [c, i]).filter(([c]) => c.status === "open");
   const merged = Object.entries(S.pubs).filter(([, p]) => p.mergedInto);
@@ -824,13 +863,16 @@ function importTab() {
         h("button", { onclick: importStaged }, "Import prepared files")) : null,
       h("p", { class: "note" }, "Every record is kept exactly as it came in the file; the same file cannot be imported twice.")),
     h("section", { class: "panel" },
-      h("div", { class: "row spread" }, h("h2", {}, `Possible duplicates (${cands.length})`), h("div", { class: "row" }, h("button", { onclick: findDuplicates }, "Find duplicates"), h("button", { class: "quiet", onclick: autoMerge }, "Merge exact DOI/PMID matches"))),
+      h("div", { class: "row spread" }, h("h2", {}, `Possible duplicates (${cands.length})`), h("div", { class: "row" },
+        cands.some(([c]) => c.proposal) || (S.dedupStaged && !(S.dedup.candidates || []).length) ? h("button", { onclick: applyProposals }, cands.some(([c]) => c.proposal) ? `Apply Claude's decisions (${cands.filter(([c]) => c.proposal).length})` : `Apply Claude's decisions (${S.dedupStaged.pairs || ""})`) : null,
+        h("button", { class: "quiet", onclick: findDuplicates }, "Find duplicates"), h("button", { class: "quiet", onclick: autoMerge }, "Merge exact DOI/PMID matches"))),
+      dedupSummary(),
       cands.length ? h("table", {}, h("thead", {}, h("tr", {}, ["Publication A", "Publication B", "Match", "Check", ""].map((x) => h("th", {}, x)))),
         h("tbody", {}, cands.map(([c, i]) => h("tr", {},
           h("td", {}, (S.pubs[c.a] || {}).title || c.a, h("div", { class: "note" }, `${(S.pubs[c.a] || {}).year || ""} · ${(S.pubs[c.a] || {}).file || ""}`)),
           h("td", {}, (S.pubs[c.b] || {}).title || c.b, h("div", { class: "note" }, `${(S.pubs[c.b] || {}).year || ""} · ${(S.pubs[c.b] || {}).file || ""}`)),
           h("td", {}, { doi: "Same DOI", pmid: "Same PMID", title_year: "Same title, year ±1" }[c.rule]),
-          h("td", {}, c.blockers.map((b) => h("span", { class: "tag warn" }, b))),
+          h("td", {}, c.blockers.map((b) => h("span", { class: "tag warn" }, b)), c.proposal ? h("div", { class: "note" }, `Claude: ${c.proposal.action === "merge" ? "merge" : "not duplicates"} — ${c.proposal.reason}`) : null),
           h("td", { class: "row" }, h("button", { onclick: () => decideCandidate(i, "merge") }, "Merge"), h("button", { class: "quiet", onclick: () => decideCandidate(i, "reject") }, "Not duplicates")))))) : h("p", { class: "note" }, "No open pairs. Press Find duplicates after each import.")),
     merged.length ? h("section", { class: "panel" }, h("h2", {}, `Merged (${merged.length})`),
       h("table", {}, h("tbody", {}, merged.map(([pid, p]) => h("tr", {}, h("td", {}, p.title), h("td", { class: "note" }, `${p.file} → kept as ${p.mergedInto}`), h("td", {}, h("button", { class: "quiet", onclick: () => unmerge(pid) }, "Undo merge"))))))) : null);

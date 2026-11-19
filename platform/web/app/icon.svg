@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="FishingMeta">
+  <defs>
+    <radialGradient id="sea" cx="38%" cy="28%" r="80%">
+      <stop offset="0" stop-color="#e9fbff"/>
+      <stop offset=".45" stop-color="#7fd6f2"/>
+      <stop offset="1" stop-color="#1b8fc4"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffb347"/>
+      <stop offset=".55" stop-color="#ff7a1a"/>
+      <stop offset="1" stop-color="#e05a00"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="fishclip"><path d="M30 64c0-17 16-29 36-29 17 0 29 9 34 29-5 20-17 29-34 29-20 0-36-12-36-29z"/></clipPath>
+  </defs>
+  <!-- glossy water bubble -->
+  <circle cx="64" cy="64" r="60" fill="url(#sea)"/>
+  <circle cx="64" cy="64" r="59" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="2"/>
+  <!-- tail -->
+  <path d="M33 64 14 47c-3 6-4 11-4 17s1 11 4 17z" fill="url(#body)" stroke="#2b2b2b" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M14 47c-3 6-4 11-4 17s1 11 4 17" fill="none" stroke="#fff" stroke-width="3"/>
+  <!-- dorsal and ventral fins -->
+  <path d="M52 37c4-9 14-13 24-10-2 5-3 8-3 11z" fill="url(#body)" stroke="#2b2b2b" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M58 91c2 7 9 11 17 10-2-4-2-7-1-10z" fill="url(#body)" stroke="#2b2b2b" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- body with three white bands -->
+  <g clip-path="url(#fishclip)">
+    <rect x="28" y="30" width="76" height="68" fill="url(#body)"/>
+    <path d="M35 52c2 5 2 19 0 24h6c2-5 2-19 0-24z" fill="#fff" stroke="#2b2b2b" stroke-width="2.5"/>
+    <path d="M57 32c-5 13-5 51 0 64h10c-4-13-4-51 0-64z" fill="#fff" stroke="#2b2b2b" stroke-width="2.5"/>
+    <path d="M83 33c-4 12-4 50 0 62h8c-4-12-4-50 0-62z" fill="#fff" stroke="#2b2b2b" stroke-width="2.5"/>
+    <ellipse cx="62" cy="48" rx="30" ry="10" fill="url(#gloss)" opacity=".75"/>
+  </g>
+  <path d="M30 64c0-17 16-29 36-29 17 0 29 9 34 29-5 20-17 29-34 29-20 0-36-12-36-29z" fill="none" stroke="#2b2b2b" stroke-width="3" stroke-linejoin="round"/>
+  <!-- pectoral fin and eye -->
+  <path d="M70 70c5 1 8 5 8 10-6 0-9-4-10-9z" fill="#ffb347" stroke="#2b2b2b" stroke-width="2.2" stroke-linejoin="round"/>
+  <circle cx="96" cy="58" r="4" fill="#1d1d1d"/>
+  <circle cx="97.3" cy="56.7" r="1.3" fill="#fff"/>
+  <!-- bubbles -->
+  <circle cx="106" cy="40" r="5" fill="#fff" fill-opacity=".35" stroke="#fff" stroke-width="1.6"/>
+  <circle cx="112" cy="27" r="3" fill="#fff" fill-opacity=".35" stroke="#fff" stroke-width="1.3"/>
+  <!-- top gloss of the bubble -->
+  <path d="M20 46C26 22 50 9 72 10c-26 6-41 18-52 36z" fill="#fff" opacity=".55"/>
+</svg>

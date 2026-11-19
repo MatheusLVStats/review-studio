@@ -1,4 +1,4 @@
-# Review platform v1 — specification
+# FishingMeta (review platform v1) — specification
 
 Status: draft for the first local version (branch `platform-v2`).
 Inputs: `docs/rayyan-flows/01-*`, `02-*` (what a user sees in Rayyan), the Review Studio rules already approved in the `rs` schema, PRISMA 2020 and the Cochrane Handbook (chapter 4: two independent reviewers, documented resolution).

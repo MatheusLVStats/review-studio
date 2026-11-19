@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { call, download } from "@/lib/api";
+import { Brand } from "@/app/brand";
 
 type Member = { id: number; display_name: string; email: string; role: string };
 type Review = { id: number; title: string; my_role: string; blind_mode: boolean; members: Member[];
@@ -34,7 +35,7 @@ export default function ReviewPage() {
   return (
     <>
       <header className="top">
-        <span><Link href="/">Reviews</Link> / <strong>{review.title}</strong></span>
+        <span className="row"><Brand /><span className="crumb"><Link href="/">Reviews</Link> / <strong>{review.title}</strong></span></span>
         <span className="note">Your role: {review.my_role} · Blinding {review.blind_mode ? "on" : "off"}</span>
       </header>
       <main>
@@ -180,7 +181,7 @@ function ImportTab({ rid }: { rid: number }) {
               <td>{c.blockers.map((b: string) => <span key={b} className="tag d-maybe">{b === "different_kind" ? "different publication type: link as same study instead" : b.startsWith("notice") ? "correction or notice" : b}</span>)}</td>
               <td className="row">
                 <button onClick={async () => { await run(() => call(`/reviews/${rid}/dedup/candidates/${c.id}/merge`, { method: "POST" }), "Merged."); load(); }}>Merge</button>
-                <button onClick={async () => { await run(() => call(`/reviews/${rid}/dedup/candidates/${c.id}/reject`, { method: "POST" }), "Marked as not duplicates."); load(); }}>Not duplicates</button>
+                <button className="quiet" onClick={async () => { await run(() => call(`/reviews/${rid}/dedup/candidates/${c.id}/reject`, { method: "POST" }), "Marked as not duplicates."); load(); }}>Not duplicates</button>
               </td>
             </tr>))}</tbody></table>
         {cands.length === 0 && <p className="note">No open pairs.</p>}

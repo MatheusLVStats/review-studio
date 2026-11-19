@@ -1,4 +1,4 @@
-# Review platform v1 (local)
+# FishingMeta — review platform v1 (local)
 
 A first working version of our own screening platform: create a review → import references → merge duplicates → assign to two reviewers → vote independently (blinded) → open reconciliation → resolve conflicts → export.
 

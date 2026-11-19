@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { call, setToken } from "@/lib/api";
+import { Brand } from "@/app/brand";
 
 type Me = { id: number; email: string; display_name: string };
 type ReviewRow = { id: number; title: string; role: string; blind_mode: boolean; publications: number };
@@ -39,9 +40,9 @@ export default function Home() {
   return (
     <>
       <header className="top">
-        <strong>Review platform</strong>
+        <Brand />
         <span className="row">{me.display_name}
-          <button onClick={async () => { await call("/auth/logout", { method: "POST" }); setToken(null); load(); }}>Sign out</button>
+          <button className="quiet" onClick={async () => { await call("/auth/logout", { method: "POST" }); setToken(null); load(); }}>Sign out</button>
         </span>
       </header>
       <main>
@@ -81,7 +82,11 @@ function SignIn({ onDone }: { onDone: () => void }) {
     } catch (x: any) { setErr(x.message); }
   }
   return (
-    <main style={{ maxWidth: 420 }}>
+    <main className="welcome">
+      <img src="/fishingmeta.svg" alt="" />
+      <span className="name">FishingMeta</span>
+      <p className="note">Systematic reviews and meta-analyses for your team</p>
+      <section>
       <h1>{mode === "login" ? "Sign in" : "Create an account"}</h1>
       <form onSubmit={submit}>
         {mode === "register" && <label><span>Name shown to your team</span><input name="display_name" required /></label>}
@@ -91,9 +96,10 @@ function SignIn({ onDone }: { onDone: () => void }) {
         <button className="primary">{mode === "login" ? "Sign in" : "Create account"}</button>
         {err && <p className="err">{err}</p>}
       </form>
+      </section>
       <p className="note">
         {mode === "login" ? "No account yet? " : "Already have an account? "}
-        <button onClick={() => { setErr(""); setMode(mode === "login" ? "register" : "login"); }}>
+        <button className="quiet" onClick={() => { setErr(""); setMode(mode === "login" ? "register" : "login"); }}>
           {mode === "login" ? "Create an account" : "Sign in"}
         </button>
       </p>

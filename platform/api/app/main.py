@@ -1,4 +1,4 @@
-"""Review platform v1 API. See docs/spec/platform-spec.md.
+"""FishingMeta API (platform v1). See docs/spec/platform-spec.md.
 
 Every response that can carry another reviewer's decision is filtered by the database function
 rp.can_see_others(review, publication, stage, user). The web client receives only what it may show.
@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from . import db, dedup
 from .parsers import PARSERS, detect_format
 
-app = FastAPI(title="Review platform v1")
+app = FastAPI(title="FishingMeta API")
 app.add_middleware(CORSMiddleware, allow_origins=os.environ.get("WEB_ORIGINS", "http://localhost:3000").split(","),
                    allow_methods=["*"], allow_headers=["*"])
 

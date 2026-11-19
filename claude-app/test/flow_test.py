@@ -60,6 +60,11 @@ with sync_playwright() as pw:
             p.screenshot(path=SHOTS / "2-ana-screening.png", full_page=True)
 
     ana, bruno = pages["ana"], pages["bruno"]
+    # Reviewers are Editors of the page but must not see lead controls.
+    expect(ana.get_by_role("button", name="Import and duplicates")).to_have_count(0)
+    ana.get_by_role("button", name="Reconciliation").click()
+    expect(ana.get_by_role("button", name=re.compile("Open reconciliation"))).to_have_count(0)
+    expect(ana.locator("header .who")).to_have_text("Reviewer")
     # Blinded: Ana sees no team decisions anywhere; progress shows counts only.
     ana.get_by_role("button", name="Overview").click()
     expect(ana.get_by_text("Blinded until reconciliation").first).to_be_visible()

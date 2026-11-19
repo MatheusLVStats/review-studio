@@ -538,6 +538,11 @@ async function assignAll(stage, uids) {
   catch (e) { say(dbErr(e), true); }
 }
 
+// Lead controls follow the role given inside the review, because on plans without a Contributor level
+// every reviewer has to be an Editor of the page. (The database cannot tell a lead Editor from a reviewer Editor.)
+function isLead() { return S.isOwner || (S.canEdit && ((S.members[S.uid] || {}).role === "lead")); }
+function roleLabel() { if (S.isOwner) return "Owner"; const m = S.rid && S.members[S.uid]; if (m) return m.role === "lead" ? "Lead" : "Reviewer"; return S.canEdit ? "Editor" : "Viewer (read only)"; }
+
 function myVote(pid, stage) { return ((S.myVotes[S.rid + "_" + stage] || {})[pid]) || null; }
 async function castVote(pid, stage, d, reason) {
   if ((S.stages[stage] || {}).open) return say("Voting is closed: reconciliation is open for this stage.", true);
@@ -673,7 +678,7 @@ function header() {
   return h("header", { class: "top" },
     h("a", { class: "brand", href: "#", onclick: (e) => { e.preventDefault(); S.rid = null; S.review = null; S.unsub.forEach((u) => u()); S.unsub = []; try { history.replaceState(null, "", " "); } catch {} render(); } }, h("img", { src: LOGO, alt: "" }), h("span", { class: "name" }, "FishingMeta")),
     S.review ? h("span", { class: "crumb" }, S.review.title) : null,
-    h("span", { class: "who" }, S.user ? (S.isOwner ? "Owner" : S.canEdit ? "Editor" : "Reviewer") : ""));
+    h("span", { class: "who" }, S.user ? roleLabel() : ""));
 }
 
 function homeView() {
@@ -681,8 +686,9 @@ function homeView() {
   return h("main", {},
     h("section", { class: "panel" },
       h("h1", {}, "Reviews"),
-      S.reviews.length ? h("ul", { class: "reviews" }, S.reviews.map((r) => h("li", {}, h("button", { class: "linkish", onclick: () => openReview(r.id) }, r.title), h("span", { class: "note" }, " · created " + (r.createdAt || "").slice(0, 10))))) : h("p", { class: "note" }, S.canEdit ? "No reviews yet. Create the first one below." : "No reviews yet. A lead will create one and add you to it.")),
-    S.canEdit ? h("section", { class: "panel" },
+      S.reviews.length ? h("ul", { class: "reviews" }, S.reviews.map((r) => h("li", {}, h("button", { class: "linkish", onclick: () => openReview(r.id) }, r.title), h("span", { class: "note" }, " · created " + (r.createdAt || "").slice(0, 10))))) : h("p", { class: "note" }, S.canEdit ? "No reviews yet. Create the first one below." : "No reviews yet. A lead will create one and add you to it."),
+      !S.canEdit && S.user ? h("p", { class: "banner" }, "You can read this page but not save anything. Ask the owner to invite your e-mail as Editor in the Share menu.") : null),
+    S.isOwner ? h("section", { class: "panel" },
       h("h2", {}, "Create a review"),
       h("form", { onsubmit: (e) => { e.preventDefault(); const f = new FormData(e.target); if (String(f.get("title")).trim()) createReview(String(f.get("title")).trim(), String(f.get("criteria") || "")); } },
         h("label", { for: "nr-title" }, "Title"), h("input", { id: "nr-title", name: "title", required: true }),
@@ -691,7 +697,7 @@ function homeView() {
 }
 
 function reviewView() {
-  const lead = S.canEdit;
+  const lead = isLead();
   const tabs = [["overview", "Overview"], lead && ["import", "Import and duplicates"], ["screen", "Title and abstract"], ["fulltext", "Full text"], ["reconcile", "Reconciliation"], ["extract", "Data extraction"], ["prisma", "PRISMA"], ["analysis", "Analysis"], ["manuscript", "Manuscript"], ["export", "Export"]].filter(Boolean);
   const body = { overview: overviewTab, import: importTab, screen: () => screenTab("ta"), fulltext: () => screenTab("ft"), reconcile: reconcileTab, extract: extractTab, prisma: prismaTab, analysis: analysisTab, manuscript: manuscriptTab, export: exportTab }[S.tab] || overviewTab;
   return h("main", {},
@@ -712,7 +718,7 @@ function overviewTab() {
     return h("tr", {}, h("th", {}, STAGES[st]), h("td", { class: "num" }, String(el.length)), h("td", {}, label));
   });
   const prog = Object.entries(S.progress).map(([uid, m]) => [uid, m[S.rid + "_" + S.stage]]).filter(([, x]) => x);
-  const lead = S.canEdit;
+  const lead = isLead();
   return h("div", {},
     h("section", { class: "panel" },
       h("h2", {}, "Summary"),
@@ -727,7 +733,7 @@ function overviewTab() {
       h("h2", {}, "Team"),
       h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Name"), h("th", {}, "Role in this review"))), h("tbody", {}, Object.entries(S.members).map(([uid, m]) => h("tr", {}, h("td", {}, nameOf(uid)), h("td", {}, m.role))))),
       lead ? memberPicker() : null,
-      h("p", { class: "note" }, "To add someone, first share this page with them from the Share button (Contributor for reviewers, Editor for leads), then add them here.")),
+      h("p", { class: "note" }, "To add someone: in the page's Share menu, invite their e-mail as Editor (Viewers and Commenters cannot save votes), keep general access restricted (not \"anyone with the link\"), then add them here as Reviewer or Lead. Only leads see assignment, reconciliation and resolution controls.")),
     lead ? h("section", { class: "panel" },
       h("h2", {}, "Assign publications"),
       h("p", { class: "note" }, "Assigns every eligible publication that still has room (two reviewers each) to the people you tick."),
@@ -778,10 +784,10 @@ function screenTab(st) {
   const done = mineAll.filter((p) => myVote(p, st)).length;
   const head = h("div", { class: "row spread" }, h("div", { class: "row" }, h("strong", {}, STAGES[st]), h("span", { class: "note" }, `${done} of ${mineAll.length} decided by you`)),
     h("div", { class: "row seg" }, ["todo", "all"].map((f) => h("button", { class: S.filter === f ? "on" : "quiet", onclick: () => { S.filter = f; render(); } }, f === "todo" ? "Undecided" : "All mine"))));
-  if (!mineAll.length) return h("div", {}, head, st === "ft" && S.canEdit ? fulltextManager() : null, h("section", { class: "panel" }, h("p", {}, st === "ft" ? "Nothing is assigned to you at full text yet. Publications reach this stage when their title/abstract decision is include; a lead then assigns them." : "Nothing is assigned to you at this stage.")));
+  if (!mineAll.length) return h("div", {}, head, st === "ft" && isLead() ? fulltextManager() : null, h("section", { class: "panel" }, h("p", {}, st === "ft" ? "Nothing is assigned to you at full text yet. Publications reach this stage when their title/abstract decision is include; a lead then assigns them." : "Nothing is assigned to you at this stage.")));
   const p = S.pubs[S.sel], v = myVote(S.sel, st), team = teamView(S.sel, st), ai = S.myAi[st + "_" + S.sel];
   const notRetrieved = st === "ft" && (S.retrieval[S.sel] || {}).status === "not_retrieved";
-  return h("div", {}, head, st === "ft" && S.canEdit ? fulltextManager() : null,
+  return h("div", {}, head, st === "ft" && isLead() ? fulltextManager() : null,
     open ? h("p", { class: "banner" }, "Reconciliation is open for this stage, so voting is closed. Your votes have been shared with the team.") : null,
     h("div", { class: "screen" },
       h("ul", { class: "queue", "aria-label": "Your publications" }, (items.length ? items : mineAll).map((pid) => {
@@ -807,7 +813,7 @@ function fulltextBox(pid) {
   const f = S.fulltext[pid], nr = (S.retrieval[pid] || {}).status === "not_retrieved";
   return h("div", { class: "ft" },
     f ? h("p", {}, h("a", { href: f.url, target: "_blank", rel: "noopener" }, "Open full text (PDF): " + f.name)) : h("p", { class: "note" }, nr ? "Marked as not retrieved." : "No PDF attached yet."),
-    S.canEdit && S.assets ? h("label", { class: "row" }, f ? "Replace PDF " : "Attach PDF ", h("input", { type: "file", accept: "application/pdf,.pdf", "aria-label": "Attach PDF", onchange: (e) => { const x = e.target.files[0]; if (x) attachPdf(pid, x); e.target.value = ""; } })) : null);
+    isLead() && S.assets ? h("label", { class: "row" }, f ? "Replace PDF " : "Attach PDF ", h("input", { type: "file", accept: "application/pdf,.pdf", "aria-label": "Attach PDF", onchange: (e) => { const x = e.target.files[0]; if (x) attachPdf(pid, x); e.target.value = ""; } })) : null);
 }
 function fulltextManager() {
   const el = eligible("ft");
@@ -830,7 +836,7 @@ async function attachPdf(pid, file) {
 }
 
 function reconcileTab() {
-  const st = S.stage, open = !!(S.stages[st] || {}).open, lead = S.canEdit;
+  const st = S.stage, open = !!(S.stages[st] || {}).open, lead = isLead();
   const el = eligible(st), views = el.map((pid) => [pid, teamView(pid, st)]);
   const conflicts = views.filter(([, v]) => v.revealed && v.status === "conflict");
   const waiting = Object.keys(S.members).filter((u) => Object.values(S.assign[st] || {}).some((us) => us.includes(u)) && !((S.released[st] || {})[u] || {}).done);
@@ -928,7 +934,7 @@ async function aiExtract(pid, pasted) {
   } catch { say("Claude could not suggest values just now.", true); }
 }
 function extractTab() {
-  const studies = includedStudies(), lead = S.canEdit;
+  const studies = includedStudies(), lead = isLead();
   const setupPanel = lead ? h("section", { class: "panel" }, h("h2", {}, "Extraction form"),
     h("form", { onsubmit: (e) => { e.preventDefault(); const f = new FormData(e.target); const outcomes = String(f.get("outcomes")).split("\n").map((l) => l.trim()).filter(Boolean).map((l, i) => { const [name, type, timepoint, unit] = l.split("|").map((x) => (x || "").trim()); return { id: "o" + (i + 1), name, type: /bin|dic|event/i.test(type) ? "binary" : "continuous", timepoint: timepoint || "", unit: unit || "" }; });
       saveSetup({ ...S.setup, arms: [String(f.get("arm1") || "Intervention"), String(f.get("arm2") || "Control")], studyFields: String(f.get("fields")).split(",").map((x) => x.trim()).filter(Boolean), outcomes }); } },
@@ -1045,7 +1051,7 @@ function copyBox(text) {
     h("button", { class: "quiet", onclick: async () => { try { await navigator.clipboard.writeText(text); say("Copied. Paste it into a chat with Claude in your Metanalysis project."); } catch { say("Copy was blocked; select the text and copy it by hand.", true); } } }, "Copy"));
 }
 function analysisTab() {
-  const r = readiness(), req = S.requests.analysis, lead = S.canEdit, csvs = extractionCsvs();
+  const r = readiness(), req = S.requests.analysis, lead = isLead(), csvs = extractionCsvs();
   const st = S.setup.stats || { model: "REML", hksjBelow: 5, minStudies: 3 };
   const ask = `Realizar análise estatística do FishingMeta — revisão "${S.review.title}" (id ${S.rid}). Leia a extração conferida, rode o script em R/metafor no meu RStudio como na metanálise de magnésio vs lidocaína (${st.model}, HKSJ quando houver menos de ${st.hksjBelow} estudos, pooling só com ${st.minStudies} ou mais), exporte figuras e tabelas para o Word e grave os resultados de volta no FishingMeta.`;
   return h("div", {},
@@ -1063,7 +1069,7 @@ function analysisTab() {
 }
 const fmt = (x) => (x == null || x === "" ? "" : Number(x).toFixed(2));
 function manuscriptTab() {
-  const req = S.requests.manuscript, lead = S.canEdit;
+  const req = S.requests.manuscript, lead = isLead();
   const ask = `Escrever manuscrito do FishingMeta — revisão "${S.review.title}" (id ${S.rid}). Use o protocolo registrado, o fluxograma PRISMA, as decisões de triagem, a extração conferida e os resultados da análise gravados no FishingMeta. Siga PRISMA 2020 e o estilo dos nossos artigos publicados, e crie o manuscrito como documento.`;
   return h("div", {}, h("section", { class: "panel" }, h("h2", {}, "Manuscript"),
     h("p", {}, "Claude drafts the manuscript as a document you can edit and comment on, from the protocol and from what this review holds: the PRISMA counts, screening decisions, checked extraction and the R results."),

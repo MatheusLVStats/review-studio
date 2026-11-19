@@ -6,7 +6,8 @@
  * Viewer comes from ?as=<name>; "lead" is the artifact owner (admin), others are Contributors. */
 (function () {
   const as = new URLSearchParams(location.search).get("as") || "lead";
-  const LEVEL = { lead: "owner", ana: "interact", bruno: "interact", viewer: "view" }[as] || "interact";
+  // Individual plans have no Contributor level: reviewers are Editors (admin), as on Matheus's account.
+  const LEVEL = { lead: "owner", ana: "admin", bruno: "admin", viewer: "view" }[as] || "admin";
   const NAMES = { lead: "Lead", ana: "Ana", bruno: "Bruno", viewer: "Viewer" };
   const uid = "u-" + as;
   const PFX = "fm:";   // one localStorage key per document, so two pages never overwrite each other's writes

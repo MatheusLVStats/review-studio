@@ -99,29 +99,45 @@ with sync_playwright() as pw:
     k = lead.locator("table").last.inner_text(); print("agreement:", k.replace("\n", " | "))
     assert "0.40" in k, k  # Zeta's FIRST votes agree; 2 of 5 agree
 
-    # ---- Full text: Gamma (resolved include), Zeta and Theta reach this stage.
+    # ---- Full text: Gamma (resolved include), Zeta and Theta reach this stage. Reviewers: Ana and Claude.
     lead.get_by_role("button", name="Overview").click()
-    lead.get_by_role("checkbox", name="Ana").check(); lead.get_by_role("checkbox", name="Bruno").check()
+    lead.get_by_role("button", name="Add Claude (AI) as reviewer").click(); status(lead, "Member added")
+    lead.get_by_role("checkbox", name="Ana").check(); lead.get_by_role("checkbox", name="Claude (AI)").check()
     lead.get_by_label("Stage to assign").select_option("ft")
     lead.get_by_role("button", name="Assign", exact=True).click(); status(lead, "6 assignments added")
+    expect(lead.locator(".piecard").first).to_be_visible()
     lead.get_by_role("button", name="Full text").click()
     expect(lead.get_by_role("heading", name="Full texts to retrieve (3)")).to_be_visible()
     lead.get_by_label("Attach PDF").first.set_input_files(files=[{"name": "zeta.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4 synthetic"}])
     status(lead, "PDF attached")
-    FT = {"Gamma": ("Exclude", "Exclude"), "Zeta": ("Include", "Include"), "Theta": ("Include", "Include")}
-    for i, n in enumerate(("ana", "bruno")):
-        p = pages[n]; p.get_by_role("button", name="Full text").click()
-        for key, votes in FT.items():
-            p.locator(".queue button").filter(has_text=word(key)).first.click()
-            expect(p.locator(".votebar .target")).to_contain_text(word(key))
-            if votes[i] == "Exclude":
-                p.get_by_label("Reason for excluding").select_option("Wrong study design")
-            p.locator(".votebar").get_by_role("button", name=votes[i], exact=True).click(); status(p, "Saved")
+    # Claude's votes, written as the platform tools write them: into the owner's private area (blind to everyone).
+    rid = lead.evaluate("location.hash.slice(1)")
+    lead.evaluate(r"""async (rid) => {
+      const db = await claude.use('db');
+      const pubs = {}; (await db.collection('reviews/' + rid + '/pubs').get()).docs.forEach(d => Object.assign(pubs, d.data().items));
+      const id = (w) => Object.keys(pubs).find(k => !pubs[k].mergedInto && new RegExp('\\b' + w + '\\b').test(pubs[k].title));
+      const t = new Date().toISOString(), v = (d, r) => ({ d, r, t, h: [{ d, r, t }], quote: 'synthetic' });
+      await db.doc('data/users/u-lead/c_' + rid + '_ft_000').set({ items: { [id('Gamma')]: v('exclude', 'Wrong study design'), [id('Zeta')]: v('include', null), [id('Theta')]: v('include', null) } });
+      const pr = await db.doc('progress/u-lead').get(); await db.doc('progress/u-lead').set({ ...(pr.exists ? pr.data() : {}), [rid + '_ft_claude']: { assigned: 3, voted: 3 } });
+    }""", rid)
+    FT = {"Gamma": "Exclude", "Zeta": "Include", "Theta": "Include"}
+    ana.get_by_role("button", name="Full text").click()
+    for key, vote in FT.items():
+        ana.locator(".queue button").filter(has_text=word(key)).first.click()
+        expect(ana.locator(".votebar .target")).to_contain_text(word(key))
+        if vote == "Exclude":
+            ana.get_by_label("Reason for excluding").select_option("Wrong study design")
+        ana.locator(".votebar").get_by_role("button", name=vote, exact=True).click(); status(ana, "Saved")
+    lead.get_by_role("button", name="Overview").click()
+    expect(lead.get_by_role("cell", name="Claude (AI)").first).to_be_visible()
+    lead.screenshot(path=SHOTS / "0-overview-pies.png", full_page=True)
     lead.get_by_role("button", name="Reconciliation").click()
     lead.get_by_label("Stage").select_option("ft")
     lead.get_by_role("button", name=re.compile("Open reconciliation")).click(); status(lead, "Reconciliation opened")
     expect(lead.get_by_role("heading", name="Conflicts (0)")).to_be_visible(timeout=15000)
     lead.wait_for_timeout(1500)
+    rel = lead.evaluate("Object.keys(localStorage).filter(k => k.includes('_ft_claude'))"); print("claude released:", rel)
+    assert rel, "Claude's votes were not published at reconciliation"
 
     # ---- Extraction: lead defines the form, Ana enters (with Claude's suggestion), Bruno checks.
     lead.get_by_role("button", name="Data extraction").click()
@@ -146,14 +162,14 @@ with sync_playwright() as pw:
         assert t in svg, t
     lead.screenshot(path=SHOTS / "7-prisma.png", full_page=True)
     lead.get_by_role("button", name="Analysis").click()
-    lead.get_by_role("button", name="Realizar análise estatística").click(); status(lead, "Request saved")
+    lead.get_by_role("button", name="Run statistical analysis").click(); status(lead, "Request saved")
     expect(lead.locator(".copybox")).to_contain_text("Realizar análise estatística do FishingMeta")
     lead.get_by_role("button", name=re.compile("Continuous data")).click()
     cont = lead.evaluate("window.__downloads.at(-1).data"); print(cont)
     assert "Zeta 2023" in cont and ",yes," in cont
     lead.screenshot(path=SHOTS / "8-analysis.png", full_page=True)
     lead.get_by_role("button", name="Manuscript").click()
-    lead.get_by_role("button", name="Escrever manuscrito").click(); status(lead, "Request saved")
+    lead.get_by_role("button", name="Write manuscript").click(); status(lead, "Request saved")
 
     # Voting is closed after reconciliation opens.
     lead.get_by_role("button", name="Reconciliation").click(); lead.get_by_label("Stage").select_option("ta")

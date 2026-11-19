@@ -120,6 +120,11 @@ details.ai summary { cursor: pointer; font-weight: 600; }
 button.big { font-size: 1.05rem; padding: 10px 22px; margin: 6px 0 10px; }
 .prisma { overflow-x: auto; background: #f6fcff; border-radius: 12px; border: 1px solid rgba(15,127,179,.2); }
 .ft { margin: 8px 0; }
+.pies { display: flex; flex-wrap: wrap; gap: 18px; }
+.piecard { display: grid; justify-items: center; gap: 4px; padding: 10px 16px; border-radius: 16px; background: rgba(255,255,255,.55); border: 1px solid var(--edge); }
+.piecard h3 { font-size: .95rem; margin: 0; }
+.legend { list-style: none; margin: 0; padding: 0; font-size: .85rem; display: grid; gap: 2px; }
+.legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(255,255,255,.9); box-shadow: 0 1px 2px rgba(9,84,128,.3); }
 @media (max-width: 760px) { .screen { grid-template-columns: 1fr; } .queue { max-height: 34vh; } header.top { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 @media (prefers-reduced-transparency: reduce) { .panel, .record, .queue, .card, header.top { backdrop-filter: none; background: #fff; } }

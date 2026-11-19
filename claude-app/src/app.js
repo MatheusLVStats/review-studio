@@ -22,7 +22,7 @@ const S = {
   tab: "overview", stage: "ta", sel: null, filter: "todo", unsub: [], relUnsub: [], msg: "",
   ready: { mine: false, assign: {}, stages: {} },
   assets: null, fulltext: {}, setup: { outcomes: [], studyFields: ["Design", "Country", "Follow-up"], arms: ["Intervention", "Control"] },
-  extraction: {}, analysis: [], requests: {}, manuscript: null, xsel: null, aiDraft: null,
+  extraction: {}, analysis: [], requests: {}, manuscript: null, xsel: null, aiDraft: null, claudeVotes: {},
 };
 
 // ---------------------------------------------------------------- small helpers
@@ -42,7 +42,9 @@ const h = (tag, attrs = {}, ...kids) => {
 const nowIso = () => new Date().toISOString();
 const pad = (n, w = 4) => String(n).padStart(w, "0");
 const chunkOf = (pid) => Math.floor(Number(pid.slice(1)) / CHUNK);
-const nameOf = (uid) => (uid === S.uid ? "You" : (S.names[uid] || "Team member"));
+const CLAUDE = "claude";   // Claude reviews as its own member; its votes are kept blind in the owner's private area
+const nameOf = (uid) => (uid === CLAUDE ? "Claude (AI)" : uid === S.uid ? "You" : (S.names[uid] || "Team member"));
+const fullName = (uid) => (uid === CLAUDE ? "Claude (AI)" : S.names[uid] || "Team member " + String(uid).slice(-4));
 const say = (text, isErr) => { S.msg = { text, isErr }; renderMsg(); };
 
 // One write at a time per document (platform rule).
@@ -259,16 +261,20 @@ function subscribeReview(rid) {
 
 function watchReleases() {
   S.relUnsub.forEach((u) => u()); S.relUnsub = []; S.released = {};
-  for (const uid of Object.keys(S.members)) {
+  for (const uid of Object.keys(S.members).filter((u) => u !== CLAUDE)) {
     const q = S.db.collection(`released/${uid}/r`).where("rid", "==", S.rid);
     S.relUnsub.push(q.onSnapshot((snap) => {
       for (const st of Object.keys(STAGES)) {
-        const docs = snap.docs.map((d) => d.data()).filter((x) => x.stage === st);
+        const all = snap.docs.map((d) => d.data()).filter((x) => x.stage === st);
         const S2 = (S.released[st] = S.released[st] || {});
-        if (!docs.length) { delete S2[uid]; continue; }
-        const votes = {}; let done = false;
-        docs.forEach((x) => { Object.assign(votes, x.votes || {}); if (x.final) done = true; });
-        S2[uid] = { votes, done: done && docs.length >= (docs.find((x) => x.final) || {}).chunks };
+        for (const who of [uid, CLAUDE]) {
+          const docs = all.filter((x) => (x.reviewer || uid) === who);
+          if (who === CLAUDE && !all.some((x) => x.reviewer === CLAUDE)) continue;
+          if (!docs.length) { delete S2[who]; continue; }
+          const votes = {}; let done = false;
+          docs.forEach((x) => { Object.assign(votes, x.votes || {}); if (x.final) done = true; });
+          S2[who] = { votes, done: done && docs.length >= (docs.find((x) => x.final) || {}).chunks };
+        }
       }
       render();
     }, (e) => say(dbErr(e), true)));
@@ -279,13 +285,14 @@ let myVotesUnsub = null;
 function subscribeMine() {
   if (myVotesUnsub) myVotesUnsub();
   myVotesUnsub = S.db.collection("data/users/" + S.uid).onSnapshot((snap) => {
-    const votes = {}, ai = {};
+    const votes = {}, ai = {}, cv = {};
     snap.docs.forEach((d) => {
       const x = d.data() || {};
       if (d.id.startsWith("v_")) { const [, rid, st] = d.id.split("_"); const k = rid + "_" + st; votes[k] = Object.assign(votes[k] || {}, x.items || {}); }
       if (d.id.startsWith("ai_")) Object.assign(ai, x.items || {});
+      if (d.id.startsWith("c_")) { const [, rid, st] = d.id.split("_"); const k = rid + "_" + st; cv[k] = Object.assign(cv[k] || {}, x.items || {}); }
     });
-    S.myVotes = votes; S.myAi = ai; if (!snap.metadata.fromCache) S.ready.mine = true;
+    S.myVotes = votes; S.myAi = ai; S.claudeVotes = cv; if (!snap.metadata.fromCache) S.ready.mine = true;
     for (const st of Object.keys(STAGES)) maybeRelease(st);
     render();
   }, (e) => say(dbErr(e), true));
@@ -436,6 +443,7 @@ async function updateProgress(stage, justVoted) {
 let releasing = {};
 async function maybeRelease(stage) {
   const st = S.stages[stage] || {};
+  releaseClaude(stage);
   if (!st.open || !S.rid || releasing[S.rid + stage]) return;
   if (!S.ready.mine || !S.ready.assign[stage] || !S.ready.stages[stage]) return;   // never publish before my votes have loaded
   const mine = Object.entries(S.assign[stage] || {}).filter(([, us]) => us.includes(S.uid)).map(([p]) => p);
@@ -453,6 +461,21 @@ async function maybeRelease(stage) {
     }
     say("Reconciliation is open: your votes for this stage are now visible to the team.");
   } catch (e) { say(dbErr(e), true); releasing[S.rid + stage] = false; }
+}
+
+async function releaseClaude(stage) {
+  if (!S.isOwner || !S.rid || releasing["claude" + S.rid + stage] || !S.ready.mine || !S.ready.assign[stage] || !S.ready.stages[stage]) return;
+  const mine = Object.entries(S.assign[stage] || {}).filter(([, us]) => us.includes(CLAUDE)).map(([p]) => p);
+  if (!mine.length || !(S.stages[stage] || {}).open) return;
+  const ref0 = S.db.doc(`released/${S.uid}/r/${S.rid}_${stage}_claude_000`);
+  releasing["claude" + S.rid + stage] = true;
+  try {
+    const ex = await ref0.get(); if (ex.exists && ex.data().final) return;
+    const votes = S.claudeVotes[S.rid + "_" + stage] || {};
+    const items = mine.filter((p) => votes[p]).map((p) => [p, { d: votes[p].d, r: votes[p].r || null, first: votes[p].h && votes[p].h[0] ? votes[p].h[0].d : votes[p].d, quote: votes[p].quote || "", changes: Math.max(0, (votes[p].h || []).length - 1) }]);
+    const chunks = Math.max(1, Math.ceil(items.length / 400));
+    for (let c = chunks - 1; c >= 0; c--) await S.db.doc(`released/${S.uid}/r/${S.rid}_${stage}_claude_${pad(c, 3)}`).set({ rid: S.rid, stage, reviewer: CLAUDE, chunks, final: c === 0, at: nowIso(), votes: Object.fromEntries(items.slice(c * 400, (c + 1) * 400)) });
+  } catch (e) { say(dbErr(e), true); releasing["claude" + S.rid + stage] = false; }
 }
 
 async function openReconciliation(stage) {
@@ -493,7 +516,7 @@ function exportRows(stage) {
     const p = S.pubs[pid], v = teamView(pid, stage), mine = myVote(pid, stage);
     const row = { publication_id: pid, title: p.title || "", year: p.year || "", doi: p.doi || "", pmid: p.pmid || "", kind: p.kind, source_file: p.file || "", status: v.revealed ? v.status : mine ? "voted" : "pending", final_decision: v.final || "", resolution_note: v.resolution ? v.resolution.note : "" };
     for (const u of reviewers) {
-      const nm = (S.names[u] || "Team member " + u.slice(-4)).replace(/[",]/g, " ");
+      const nm = fullName(u).replace(/[",]/g, " ");
       const x = v.revealed ? v.votes.find((y) => y.uid === u) : null;
       row["first_vote " + nm] = x ? x.first || "" : u === S.uid ? (mine && mine.h ? mine.h[0].d : "") : "[blinded]";
       row["current_vote " + nm] = x ? x.d || "" : u === S.uid ? (mine ? mine.d : "") : "[blinded]";
@@ -586,9 +609,10 @@ function overviewTab() {
     const label = rev ? Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(" · ") + (rev < el.length ? ` · still blinded ${el.length - rev}` : "") : "Blinded until reconciliation";
     return h("tr", {}, h("th", {}, STAGES[st]), h("td", { class: "num" }, String(el.length)), h("td", {}, label));
   });
-  const prog = Object.entries(S.progress).map(([uid, m]) => [uid, m[S.rid + "_" + S.stage]]).filter(([, x]) => x);
+  const prog = Object.entries(S.progress).flatMap(([uid, m]) => [[uid, m[S.rid + "_" + S.stage]], [CLAUDE, m[S.rid + "_" + S.stage + "_claude"]]]).filter(([, x]) => x);
   const lead = isLead();
   return h("div", {},
+    progressPies(),
     h("section", { class: "panel" },
       h("h2", {}, "Summary"),
       h("p", {}, `${total} records imported · ${total - live} duplicates merged · ${live} publications to screen`),
@@ -619,7 +643,8 @@ function memberPicker() {
     h("input", { id: "who", placeholder: "Search people this page is shared with", "aria-label": "Search people", oninput: async (e) => { try { searchHits = await S.user.search(e.target.value); } catch { searchHits = []; } const sel = $("#who-pick"); sel.replaceChildren(...searchHits.map((x) => h("option", { value: x.id }, x.name || "Someone"))); }, onfocus: async () => { try { searchHits = await S.user.search(""); } catch { searchHits = []; } const sel = $("#who-pick"); if (sel) sel.replaceChildren(...searchHits.map((x) => h("option", { value: x.id }, x.name || "Someone"))); } }),
     h("select", { id: "who-pick", name: "uid", "aria-label": "Person" }),
     h("select", { name: "role", "aria-label": "Role" }, h("option", { value: "reviewer" }, "Reviewer"), h("option", { value: "lead" }, "Lead")),
-    h("button", { type: "submit" }, "Add to review"));
+    h("button", { type: "submit" }, "Add to review"),
+    S.members[CLAUDE] ? null : h("button", { type: "button", class: "quiet", onclick: () => addMember(CLAUDE, "reviewer") }, "Add Claude (AI) as reviewer"));
 }
 
 function importTab() {
@@ -742,6 +767,58 @@ function exportTab() {
       h("p", {}, "Pooling is done in R (metafor), as in the magnesium vs lidocaine review: extraction is exported as CSV, Claude tests the script, and the analysis runs in your RStudio with the Word export. Ask Claude in a conversation: “Run the meta-analysis for review ", S.review.title, "”.")));
 }
 
+
+// ---------------------------------------------------------------- glossy pie (Frutiger Aero)
+const PIE_COLORS = {
+  done: ["#9fe9ff", "#1fa6dc"], todo: ["#ffffff", "#cfe6ef"], included: ["#b8f2a6", "#2f9a2a"], excluded: ["#ffc1b8", "#d23b2b"],
+  conflict: ["#ffeaa0", "#e0a800"], waiting: ["#e6f3f8", "#9bbccb"], blinded: ["#e9f6fb", "#a9cddc"],
+};
+let pieN = 0;
+function pieSvg(segs, center, sub) {
+  const total = segs.reduce((t, x) => t + x.n, 0), id = "pie" + pieN++, R = 70, r = 40, cx = 90, cy = 88;
+  const defs = Object.entries(PIE_COLORS).map(([k, [a, b]]) => `<linearGradient id="${id}-${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient>`).join("");
+  let a0 = -Math.PI / 2, paths = "";
+  const arc = (a1, a2) => { const big = a2 - a1 > Math.PI ? 1 : 0, p = (rad, a) => [cx + rad * Math.cos(a), cy + rad * Math.sin(a)].map((v) => v.toFixed(2)).join(" ");
+    return `M${p(R, a1)} A${R} ${R} 0 ${big} 1 ${p(R, a2)} L${p(r, a2)} A${r} ${r} 0 ${big} 0 ${p(r, a1)} Z`; };
+  for (const sg of segs) {
+    if (!sg.n) continue;
+    const a1 = a0 + (sg.n / total) * Math.PI * 2;
+    paths += sg.n === total ? `<circle cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="url(#${id}-${sg.k})" stroke-width="${R - r}"/>` : `<path d="${arc(a0, a1 - 0.0001)}" fill="url(#${id}-${sg.k})" stroke="#fff" stroke-width="1.5"/>`;
+    a0 = a1;
+  }
+  if (!total) paths = `<circle cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="url(#${id}-todo)" stroke-width="${R - r}"/>`;
+  return `<svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="${center} ${sub}"><defs>${defs}
+<radialGradient id="${id}-gl" cx="50%" cy="20%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset=".55" stop-color="#fff" stop-opacity=".15"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<radialGradient id="${id}-bub" cx="40%" cy="30%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d9f3fd"/></radialGradient>
+<filter id="${id}-sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#09547f" flood-opacity=".25"/></filter></defs>
+<g filter="url(#${id}-sh)">${paths}</g>
+<ellipse cx="${cx}" cy="${cy - 34}" rx="54" ry="26" fill="url(#${id}-gl)"/>
+<circle cx="${cx}" cy="${cy}" r="${r - 2}" fill="url(#${id}-bub)" stroke="#fff" stroke-width="2"/>
+<text x="${cx}" y="${cy + 2}" text-anchor="middle" font-size="20" font-weight="700" fill="#0b3550" font-family="Segoe UI, Helvetica Neue, sans-serif">${center}</text>
+<text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="10" fill="#3d6680" font-family="Segoe UI, Helvetica Neue, sans-serif">${sub}</text></svg>`;
+}
+function pieCard(title, segs, center, sub) {
+  return h("div", { class: "piecard" }, h("h3", {}, title), h("div", { html: pieSvg(segs, center, sub) }),
+    h("ul", { class: "legend" }, segs.filter((x) => x.n).map((x) => h("li", {}, h("span", { class: "sw", style: `background:linear-gradient(${PIE_COLORS[x.k][0]},${PIE_COLORS[x.k][1]})` }), `${x.label}: ${x.n}`))));
+}
+function progressPies() {
+  const cards = [];
+  for (const st of Object.keys(STAGES)) {
+    const amap = S.assign[st] || {}, slots = Object.values(amap).reduce((t, us) => t + us.length, 0);
+    if (!slots) continue;
+    let cast = 0;
+    for (const [uid, m] of Object.entries(S.progress)) { const a = m[S.rid + "_" + st], c = m[S.rid + "_" + st + "_claude"]; if (a && S.members[uid]) cast += a.voted; if (c) cast += c.voted; }
+    cast = Math.min(cast, slots);
+    const pct = Math.round((100 * cast) / slots);
+    cards.push(pieCard(STAGES[st] + ": votes", [{ k: "done", n: cast, label: "Votes cast" }, { k: "todo", n: slots - cast, label: "Votes still to cast" }], pct + "%", "screened"));
+    const el = eligible(st).filter((pid) => amap[pid]), c = { included: 0, excluded: 0, conflict: 0, waiting: 0, blinded: 0 };
+    for (const pid of el) { const v = teamView(pid, st); if (!v.revealed) c.blinded++; else if (v.final === "include") c.included++; else if (v.final === "exclude") c.excluded++; else if (v.status === "conflict") c.conflict++; else c.waiting++; }
+    if (c.blinded < el.length) cards.push(pieCard(STAGES[st] + ": decisions", [{ k: "included", n: c.included, label: "Included" }, { k: "excluded", n: c.excluded, label: "Excluded" }, { k: "conflict", n: c.conflict, label: "Conflict to resolve" }, { k: "waiting", n: c.waiting, label: "Missing a vote" }, { k: "blinded", n: c.blinded, label: "Still blinded" }], String(el.length - c.blinded), "decided of " + el.length));
+  }
+  return h("section", { class: "panel" }, h("h2", {}, "Screening progress"),
+    cards.length ? h("div", { class: "pies" }, cards) : h("p", { class: "note" }, "The charts appear once publications are assigned."),
+    h("p", { class: "note" }, "While screening is blinded the charts show only how many votes are cast. Decisions appear after reconciliation."));
+}
 // ---------------------------------------------------------------- data extraction
 function includedStudies() {
   const ftAssigned = Object.keys(S.assign.ft || {}).length > 0;
@@ -929,7 +1006,7 @@ function analysisTab() {
       h("p", { class: "note" }, `Settings from the protocol: random effects (${st.model}); Hartung-Knapp-Sidik-Jonkman when fewer than ${st.hksjBelow} studies; pooled only with ${st.minStudies} or more studies; prediction intervals reported.`)),
     h("section", { class: "panel" }, h("h2", {}, "Statistical analysis"),
       h("p", {}, "The numbers are calculated in R (metafor), not in this page, so that every result can be reproduced and checked. Claude runs it in your RStudio, as in the magnesium vs lidocaine review, and writes the results back here."),
-      lead ? h("button", { class: "primary big", onclick: async () => { if (await request("analysis", { settings: st })) say("Request saved. Copy the text below into a chat with Claude."); } }, "Realizar análise estatística") : h("p", { class: "note" }, "A lead starts the analysis."),
+      lead ? h("button", { class: "primary big", onclick: async () => { if (await request("analysis", { settings: st })) say("Request saved. Copy the text below into a chat with Claude."); } }, "Run statistical analysis") : h("p", { class: "note" }, "A lead starts the analysis."),
       req ? h("div", {}, h("p", { class: "note" }, `Requested by ${nameOf(req.by)} on ${req.at.slice(0, 16).replace("T", " ")} · status: ${req.status}`), copyBox(ask)) : null,
       h("div", { class: "row" }, h("button", { class: "quiet", onclick: () => download(`extraction_dichotomous_${S.rid}.csv`, toCsv(csvs.bin)) }, `Dichotomous data (CSV, ${csvs.bin.length} rows)`), h("button", { class: "quiet", onclick: () => download(`extraction_continuous_${S.rid}.csv`, toCsv(csvs.cont)) }, `Continuous data (CSV, ${csvs.cont.length} rows)`))),
     h("section", { class: "panel" }, h("h2", {}, "Results"),
@@ -942,7 +1019,7 @@ function manuscriptTab() {
   const ask = `Escrever manuscrito do FishingMeta — revisão "${S.review.title}" (id ${S.rid}). Use o protocolo registrado, o fluxograma PRISMA, as decisões de triagem, a extração conferida e os resultados da análise gravados no FishingMeta. Siga PRISMA 2020 e o estilo dos nossos artigos publicados, e crie o manuscrito como documento.`;
   return h("div", {}, h("section", { class: "panel" }, h("h2", {}, "Manuscript"),
     h("p", {}, "Claude drafts the manuscript as a document you can edit and comment on, from the protocol and from what this review holds: the PRISMA counts, screening decisions, checked extraction and the R results."),
-    lead ? h("button", { class: "primary big", onclick: async () => { if (await request("manuscript", {})) say("Request saved. Copy the text below into a chat with Claude."); } }, "Escrever manuscrito") : h("p", { class: "note" }, "A lead starts the manuscript."),
+    lead ? h("button", { class: "primary big", onclick: async () => { if (await request("manuscript", {})) say("Request saved. Copy the text below into a chat with Claude."); } }, "Write manuscript") : h("p", { class: "note" }, "A lead starts the manuscript."),
     req ? h("div", {}, h("p", { class: "note" }, `Requested by ${nameOf(req.by)} on ${req.at.slice(0, 16).replace("T", " ")} · status: ${req.status}`), copyBox(ask)) : null,
     S.manuscript && S.manuscript.url ? h("p", {}, "Current draft: ", h("a", { href: S.manuscript.url, target: "_blank", rel: "noopener" }, S.manuscript.title || "Open the manuscript"), h("span", { class: "note" }, " · " + (S.manuscript.at || "").slice(0, 10))) : h("p", { class: "note" }, "No draft yet."),
     h("p", { class: "note" }, "Results and figures must come from the R analysis; the draft never invents numbers.")));

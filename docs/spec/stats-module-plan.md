@@ -49,14 +49,14 @@ What the prototype already does:
 | Pooling threshold | k < `min_studies` (default 3) → `status = narrative_only`, nothing pooled |
 | Output | estimate and CI (back-transformed for RR/OR, log-scale value kept), prediction interval, τ², I², Q and p, per-study yi, vi and weights |
 | Mantel-Haenszel | common-effect MH estimate reported as a sensitivity analysis for RR/OR/RD |
-| Zero cells | studies with a zero cell are listed; the rule applied is written into the result |
+| Zero cells | studies with a zero cell are listed; double-zero studies are left out of RR/OR and listed; the rule applied is written into the result |
 | Small-study test | Egger (`regtest`) only when k ≥ 10, otherwise "not run" with the reason |
 | Reproducibility | spec SHA-256, R and metafor versions, all warnings captured |
 
 Decisions still needed from you before the engine is used on real data:
 
-1. **Double-zero studies for RR/OR.** metafor's `escalc` keeps them by adding 0.5 to every cell; the Cochrane Handbook's usual approach is to leave them out of RR/OR meta-analyses. I propose leaving them out by default and listing them in the result. Your call.
-2. **RevMan comparability.** RevMan's "M-H, Random" method is not identical to an inverse-variance random-effects model on log RR. Before we rely on the engine for a paper, we should run one of your published analyses (forehead flap, necrosis outcome) through it and compare with the published numbers, including the HKSJ result RR 0.94 (0.18–4.75). I need the extracted 2×2 data from your Drive folder for that; I have not verified those numbers here.
+1. **Double-zero studies for RR/OR — decided 2026-11-19:** left out of RR/OR analyses and listed in the result (`double_zero = "exclude"`, the default). They still count as studies in the narrative and in PRISMA. A protocol can choose `"include"` (0.5 added to every cell) as a sensitivity analysis. Exclusion happens before the ≥ 3-studies check.
+2. **Comparison with the published forehead-flap paper — done 2026-11-19** (`validate.R` section 4). With the team's extraction (Noel 2017's 3 necroses allocated to the 2-stage arm, as the published totals imply), the engine reproduces the final necrosis result with **DerSimonian–Laird + HKSJ**: 0.94 (0.1855–4.75), I² 27%, p 0.92 against the published 0.94 (0.18–4.75); only the lower limit differs (0.19 vs 0.18 after rounding). The pre-revision value in the Abstract and funnel-plot section, 1.25 (0.52–3.02), I² 2%, is reproduced exactly by the 7-study set with **REML and a Wald interval**. So three things changed between draft and publication: the study set, the τ² estimator and the interval method. These figures were reproduced with metafor; the Methods section says RevMan 5.4.1 and does not name the τ² estimator. Lesson for the protocol template: name the estimator and the software that produced each number.
 3. **HKSJ threshold.** The prototype uses "k < 10". Your protocols should state the number; the plan field stores it.
 
 ## 4. Validation (done for the prototype)

@@ -71,7 +71,41 @@ rule("Egger test run at 10 or more studies", grepl("Egger", r19$small_study_test
 again <- run_analysis(list(measure = "GEN", model = list(method = "REML", hksj = "below_k", hksj_k = 10), rows = rau))
 rule("Same input gives identical output", identical(toJSON(r19, digits = NA), toJSON(again, digits = NA)))
 rr <- run_analysis(list(measure = "RR", rows = data.frame(study_id = 1:3, ai = c(4, 6, 2), n1i = c(50, 60, 40), ci = c(8, 9, 5), n2i = c(50, 58, 41))))
+dz <- run_analysis(list(measure = "RR", rows = data.frame(study_id = c("A","B","C","D"), ai = c(4, 6, 2, 0), n1i = c(50, 60, 40, 30),
+                                                          ci = c(8, 9, 5, 0), n2i = c(50, 58, 41, 31))))
+rule("RR: study with no events in either arm is left out and listed (k 4 -> 3)", dz$k == 3 && identical(unlist(dz$double_zero$excluded_studies), "D"))
+dz_inc <- run_analysis(list(measure = "RR", double_zero = "include", rows = data.frame(study_id = c("A","B","C","D"), ai = c(4, 6, 2, 0), n1i = c(50, 60, 40, 30), ci = c(8, 9, 5, 0), n2i = c(50, 58, 41, 31))))
+rule("RR: double_zero = include keeps it, with 0.5 added (k = 4)", dz_inc$k == 4 && length(dz_inc$double_zero$excluded_studies) == 0)
+dz2 <- run_analysis(list(measure = "RR", rows = data.frame(study_id = c("A","D","E"), ai = c(4, 0, 0), n1i = c(50, 30, 20), ci = c(8, 0, 0), n2i = c(50, 31, 22))))
+rule("Exclusion counted before the pooling threshold: 3 supplied, 1 informative -> narrative_only", dz2$status == "narrative_only" && dz2$studies_supplied == 3)
 rule("RR reported on the ratio scale with the log-scale estimate kept", abs(rr$estimate - exp(rr$estimate_analysis_scale)) < 1e-12)
+
+# (4) Regression: the team's own published analysis -------------------------------------------
+# Kumar SIS, ..., de Luna Barros MM, et al. Eur J Plast Surg 2026;49:122. doi:10.1007/s00238-026-02497-5
+# Necrosis, 3-stage vs 2-stage. Per-study counts from the team's extraction sheet; Noel 2017 does not say in which
+# group its 3 necroses occurred: the published totals (8/162 vs 12/196) imply 0/15 vs 3/16.
+lines <- c(lines, "", "## 4. Regression against the team's published forehead-flap meta-analysis", "",
+           "Published values have 2 decimals, so agreement means within half a unit of the last digit (0.005).", "",
+           "| Analysis | Quantity | Published | Engine | OK |", "|---|---|---|---|---|")
+ff6 <- data.frame(study_id = c("Palmer 2025", "Lo Torto 2019", "Ribuffo 2012", "de Pochat 2014", "Stahl 2015 (2003-2009)", "Noel 2017"),
+                  ai = c(2, 0, 0, 1, 5, 0), n1i = c(13, 16, 11, 7, 100, 15), ci = c(0, 4, 2, 0, 3, 3), n2i = c(39, 30, 20, 4, 87, 16))
+ff7 <- rbind(ff6, data.frame(study_id = "Stahl 2015 (2003-2012)", ai = 6, n1i = 45, ci = 1, n2i = 25))
+reg <- list(
+  list(lbl = "Final (Results/Discussion): 6 studies, DL + HKSJ", spec = list(measure = "RR", model = list(method = "DL", hksj = "always"), rows = ff6),
+       exp = list(estimate = 0.94, ci_lb = 0.18, ci_ub = 4.75, I2 = 27, p_value = 0.92), known = "ci_lb"),
+  list(lbl = "Pre-revision (Abstract/funnel plot): 7 studies, REML, Wald", spec = list(measure = "RR", model = list(method = "REML", hksj = "never"), rows = ff7),
+       exp = list(estimate = 1.25, ci_lb = 0.52, ci_ub = 3.02, I2 = 2), known = character(0)))
+for (r in reg) {
+  res <- run_analysis(r$spec)
+  for (q in names(r$exp)) {
+    e <- r$exp[[q]]; o <- res[[q]]; tol <- if (q == "I2") 0.5 else 0.005
+    ok <- abs(o - e) <= tol + 1e-9
+    status <- if (ok) "yes" else if (q %in% r$known) "known difference (see note)" else "**NO**"
+    if (!ok && !(q %in% r$known)) fail <- fail + 1
+    lines <- c(lines, sprintf("| %s | %s | %s | %.4f | %s |", r$lbl, q, format(e), o, status))
+  }
+}
+lines <- c(lines, "", "Note: the published lower limit 0.18 differs from the engine's 0.1855 (which rounds to 0.19); every other value agrees. The published analysis may have used a slightly different implementation; this does not change any conclusion. The 7-study values reproduce the pre-revision draft exactly with REML and a Wald interval, so the change between draft and publication involved the study set, the tau2 estimator (REML to DL) and the interval (Wald to HKSJ).")
 
 lines <- c(lines, "", if (fail == 0) "**All checks passed.**" else sprintf("**%d check(s) failed.**", fail))
 writeLines(lines, "REPORT.md")

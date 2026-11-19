@@ -6,7 +6,7 @@
 # The specification (JSON) holds:
 #   analysis_id, outcome, measure ("RR","OR","RD","MD","SMD","GEN"), level (default 95),
 #   model: { method: "REML"|"DL"|..., hksj: "always"|"never"|"below_k", hksj_k: 10 },
-#   min_studies (default 3), egger_min_k (default 10),
+#   min_studies (default 3), egger_min_k (default 10), double_zero: "exclude" (default) | "include",
 #   rows: one row per study with study_id and either
 #         ai,bi,ci,di (binary: events and non-events per arm) or n1i,n2i + events (ai,ci) ->
 #         binary with "events" form: ai, n1i, ci, n2i
@@ -45,9 +45,21 @@ run_analysis <- function(spec, spec_sha256 = NA_character_) {
     level <- spec$level %||% 95
     method <- spec$model$method %||% "REML"
     min_k <- spec$min_studies %||% 3
+    # Studies with no information on a ratio measure (default: left out and listed; Cochrane Handbook practice).
+    # RR: no events in either arm. OR: no events in either arm, or all participants with the event in both arms.
+    dz_rule <- spec$double_zero %||% "exclude"
+    excluded_dz <- character(0)
+    if (spec$measure %in% c("RR", "OR")) {
+      dz <- (rows$ai == 0 & rows$ci == 0) | (spec$measure == "OR" & rows$bi == 0 & rows$di == 0)
+      if (dz_rule == "exclude" && any(dz)) { excluded_dz <- as.character(rows$study_id[dz]); rows <- rows[!dz, , drop = FALSE] }
+      else if (!dz_rule %in% c("exclude", "include")) stop("Unknown double_zero rule: ", dz_rule)
+    }
     k <- nrow(rows)
     base <- list(analysis_id = spec$analysis_id %||% NA, outcome = spec$outcome %||% NA, measure = spec$measure,
-                 k = k, level = level,
+                 k = k, studies_supplied = k + length(excluded_dz), level = level,
+                 double_zero = if (spec$measure %in% c("RR", "OR"))
+                   list(rule = dz_rule, excluded_studies = as.list(excluded_dz),
+                        reason = "no events in either arm carry no information on a ratio measure") else NULL,
                  software = list(R = R.version.string, metafor = as.character(packageVersion("metafor"))),
                  spec_sha256 = spec_sha256)
     if (k < min_k) {
@@ -55,6 +67,8 @@ run_analysis <- function(spec, spec_sha256 = NA_character_) {
                           reason = sprintf("%d studies contribute; pre-specified minimum for pooling is %d.", k, min_k))))
     }
     es <- effect_sizes(spec, rows)
+    if (dz_rule == "include") es <- escalc(measure = spec$measure, ai = rows$ai, bi = rows$bi, ci = rows$ci, di = rows$di,
+                                           slab = rows$study_id, drop00 = FALSE, add = 1/2, to = "only0")
     hksj_rule <- spec$model$hksj %||% "below_k"
     hksj_k <- spec$model$hksj_k %||% 10
     use_hksj <- switch(hksj_rule, always = TRUE, never = FALSE, below_k = k < hksj_k,
@@ -84,7 +98,7 @@ run_analysis <- function(spec, spec_sha256 = NA_character_) {
         studies_with_a_zero_cell = as.list(rows$study_id[zero]),
         studies_with_zero_events_in_both_arms = as.list(rows$study_id[both0]),
         rule = if (spec$measure == "RD") "no correction needed for RD" else
-          "0.5 added to every cell of a study with a zero cell (metafor escalc default add=1/2, to='only0'); random-effects analysis only. The Mantel-Haenszel sensitivity analysis uses no correction.")
+          "0.5 added to every cell of a study with a zero cell (metafor escalc default add=1/2, to='only0'); random-effects analysis only. The Mantel-Haenszel sensitivity analysis uses no correction. Double-zero studies follow the double_zero rule above.")
       mh <- rma.mh(ai = rows$ai, bi = rows$bi, ci = rows$ci, di = rows$di, measure = spec$measure, level = level)
       out$sensitivity_mantel_haenszel_common_effect <- list(estimate = tr(as.numeric(mh$b)), ci_lb = tr(mh$ci.lb), ci_ub = tr(mh$ci.ub))
     }

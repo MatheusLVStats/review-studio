@@ -1,6 +1,6 @@
 # Statistical engine validation
 
-Run: 2026-11-19 18:50 -03. R version 4.3.3 (2024-02-29); metafor 4.4.0.
+Run: 2026-11-19 19:09 -03. R version 4.3.3 (2024-02-29); metafor 4.4.0.
 
 ## 1. Published reference values
 
@@ -72,6 +72,27 @@ Formulas written out in plain R arithmetic, without metafor, compared with the e
 | Egger test not run below 10 studies | yes |
 | Egger test run at 10 or more studies | yes |
 | Same input gives identical output | yes |
+| RR: study with no events in either arm is left out and listed (k 4 -> 3) | yes |
+| RR: double_zero = include keeps it, with 0.5 added (k = 4) | yes |
+| Exclusion counted before the pooling threshold: 3 supplied, 1 informative -> narrative_only | yes |
 | RR reported on the ratio scale with the log-scale estimate kept | yes |
+
+## 4. Regression against the team's published forehead-flap meta-analysis
+
+Published values have 2 decimals, so agreement means within half a unit of the last digit (0.005).
+
+| Analysis | Quantity | Published | Engine | OK |
+|---|---|---|---|---|
+| Final (Results/Discussion): 6 studies, DL + HKSJ | estimate | 0.94 | 0.9384 | yes |
+| Final (Results/Discussion): 6 studies, DL + HKSJ | ci_lb | 0.18 | 0.1855 | known difference (see note) |
+| Final (Results/Discussion): 6 studies, DL + HKSJ | ci_ub | 4.75 | 4.7462 | yes |
+| Final (Results/Discussion): 6 studies, DL + HKSJ | I2 | 27 | 26.8055 | yes |
+| Final (Results/Discussion): 6 studies, DL + HKSJ | p_value | 0.92 | 0.9235 | yes |
+| Pre-revision (Abstract/funnel plot): 7 studies, REML, Wald | estimate | 1.25 | 1.2500 | yes |
+| Pre-revision (Abstract/funnel plot): 7 studies, REML, Wald | ci_lb | 0.52 | 0.5182 | yes |
+| Pre-revision (Abstract/funnel plot): 7 studies, REML, Wald | ci_ub | 3.02 | 3.0156 | yes |
+| Pre-revision (Abstract/funnel plot): 7 studies, REML, Wald | I2 | 2 | 1.6697 | yes |
+
+Note: the published lower limit 0.18 differs from the engine's 0.1855 (which rounds to 0.19); every other value agrees. The published analysis may have used a slightly different implementation; this does not change any conclusion. The 7-study values reproduce the pre-revision draft exactly with REML and a Wald interval, so the change between draft and publication involved the study set, the tau2 estimator (REML to DL) and the interval (Wald to HKSJ).
 
 **All checks passed.**

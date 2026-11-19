@@ -380,13 +380,14 @@ function subscribeReview(rid) {
   S.unsub.forEach((u) => u()); S.unsub = []; S.relUnsub.forEach((u) => u()); S.relUnsub = [];
   S.ready.assign = {}; S.ready.stages = {};
   Object.assign(S, { fulltext: {}, extraction: {}, analysis: [], requests: {}, manuscript: null, xsel: null, aiDraft: null, setup: { outcomes: [], studyFields: ["Design", "Country", "Follow-up"], arms: ["Intervention", "Control"] } });
-  Object.assign(S, { pubs: {}, imports: [], members: {}, dedup: { candidates: [], log: [] }, assign: { ta: {}, ft: {} }, stages: {}, resolutions: {}, retrieval: {}, released: {}, sel: null });
+  Object.assign(S, { pubs: {}, imports: [], members: {}, dedup: { candidates: [], log: [] }, assign: { ta: {}, ft: {} }, stages: {}, resolutions: {}, retrieval: {}, released: {}, staged: [], sel: null });
   const base = `reviews/${rid}`;
   const sub = (ref, fn) => S.unsub.push(ref.onSnapshot(fn, (e) => say(dbErr(e), true)));
   sub(S.db.collection(base + "/pubs"), (snap) => { const all = {}; snap.docs.forEach((d) => Object.assign(all, (d.data() || {}).items || {})); S.pubs = all; render(); });
   sub(S.db.collection(base + "/imports").orderBy("at"), (snap) => { S.imports = snap.docs.map((d) => ({ id: d.id, ...d.data() })); render(); });
   sub(S.db.collection(base + "/members"), (snap) => { S.members = Object.fromEntries(snap.docs.map((d) => [d.id, d.data()])); resolveNames(); watchReleases(); render(); });
   sub(S.db.doc(base + "/meta/dedup"), (d) => { S.dedup = d.exists ? d.data() : { candidates: [], log: [] }; render(); });
+  sub(S.db.doc(base + "/meta/staged"), (d) => { S.staged = d.exists ? d.data().files || [] : []; render(); });
   sub(S.db.doc(base + "/meta/retrieval"), (d) => { S.retrieval = d.exists ? d.data().map || {} : {}; render(); });
   for (const st of Object.keys(STAGES)) {
     sub(S.db.doc(`${base}/assign/${st}`), (d) => { S.assign[st] = d.exists ? d.data().map || {} : {}; if (!d.metadata.fromCache) S.ready.assign[st] = true; maybeRelease(st); render(); });
@@ -463,10 +464,12 @@ async function audit(rid, action, detail) {
   try { await S.db.collection(`reviews/${rid}/audit`).add({ action, detail: detail || {}, by: S.uid, at: nowIso() }); } catch { /* audit is best effort for non-editors */ }
 }
 
-async function importFile(file) {
+async function importFile(file) { return importBuffer(file.name, await file.arrayBuffer()); }
+async function importBuffer(name, buf) {
+  const file = { name };
   const fmt = P.detect(file.name);
   if (!fmt) return say("Use a .ris, .bib or .csv file.", true);
-  const buf = await file.arrayBuffer(), sha = await sha256(buf);
+  const sha = await sha256(buf);
   if (S.imports.some((b) => b.sha256 === sha)) return say(`This exact file was already imported (${S.imports.find((b) => b.sha256 === sha).filename}).`, true);
   let text; try { text = new TextDecoder("utf-8", { fatal: true }).decode(buf); } catch { text = new TextDecoder("latin1").decode(buf); }
   const { entries, failures } = P[fmt](text);
@@ -478,10 +481,11 @@ async function importFile(file) {
     srcItems.push({ sid, raw: e.raw, warnings: e.warnings });
     newPubs[pid] = { ...e.norm, sources: [sid], file: file.name, mergedInto: null };
   });
-  say(`Saving ${entries.length} references…`);
+  say(`Saving ${entries.length} references…`); let ok = false;
   try {
     const base = `reviews/${S.rid}`;
-    for (let c = 0; c * CHUNK < srcItems.length; c++) await S.db.doc(`${base}/sources/${bid}_${pad(c, 3)}`).set({ items: srcItems.slice(c * CHUNK, (c + 1) * CHUNK) });
+    const SRC = 25;   // raw records are large (Embase ~4 KB each); keep each document well under 256 KiB
+    for (let c = 0; c * SRC < srcItems.length; c++) await S.db.doc(`${base}/sources/${bid}_${pad(c, 3)}`).set({ items: srcItems.slice(c * SRC, (c + 1) * SRC) });
     const byChunk = {};
     for (const [pid, p] of Object.entries(newPubs)) (byChunk[chunkOf(pid)] = byChunk[chunkOf(pid)] || {})[pid] = p;
     for (const [c, items] of Object.entries(byChunk)) {
@@ -490,9 +494,26 @@ async function importFile(file) {
     }
     const summary = { filename: file.name, format: fmt, sha256: sha, entries: entries.length + failures.length, imported: entries.length, warnings: entries.filter((e) => e.warnings.length).length, failed: failures.length, failures: failures.slice(0, 50), by: S.uid, at: nowIso() };
     await S.db.doc(`${base}/imports/${bid}`).set(summary);
+    Object.assign(S.pubs, newPubs); S.imports = [...S.imports, { id: bid, ...summary }];   // so a second file in the same run gets fresh ids
     await audit(S.rid, "import", { filename: file.name, imported: entries.length, failed: failures.length });
+    ok = true;
     say(`${file.name}: ${summary.entries} entries found, ${summary.imported} imported, ${summary.warnings} with warnings, ${summary.failed} failed.` + (failures.length ? " " + failures.map((f) => f.message).join("; ") : ""), failures.length > 0);
   } catch (e) { say(dbErr(e), true); }
+  return ok;
+}
+
+// Files Claude stages for import: uploaded as page assets, listed in reviews/<rid>/meta/staged.
+async function importStaged() {
+  const todo = (S.staged || []).filter((f) => !S.imports.some((b) => b.sha256 === f.sha256));
+  if (!todo.length) return say("Every staged file is already imported.");
+  for (const f of todo) {
+    try {
+      const r = await fetch("/_blob/" + f.asset);
+      if (!r.ok) throw new Error(`could not load ${f.filename} (${r.status})`);
+      if (!(await importBuffer(f.filename, await r.arrayBuffer()))) return;
+    } catch (e) { return say(String(e.message || e), true); }
+  }
+  say(`Imported ${todo.length} staged file(s). Press Find duplicates next.`);
 }
 
 async function savePubs(changes) {
@@ -798,6 +819,9 @@ function importTab() {
       h("h2", {}, "Import references"),
       h("div", { class: "row" }, h("label", { for: "file" }, "RIS, BibTeX or CSV file"), h("input", { id: "file", type: "file", accept: ".ris,.txt,.bib,.bibtex,.csv", onchange: (e) => { const f = e.target.files[0]; if (f) importFile(f); e.target.value = ""; } })),
       S.imports.length ? h("table", {}, h("thead", {}, h("tr", {}, ["File", "Format", "Entries", "Imported", "Warnings", "Failed"].map((x) => h("th", {}, x)))), h("tbody", {}, S.imports.map((b) => h("tr", {}, h("td", {}, b.filename), h("td", {}, b.format), ...[b.entries, b.imported, b.warnings, b.failed].map((n) => h("td", { class: "num" }, String(n))))))) : h("p", { class: "note" }, "No files imported yet."),
+      (S.staged || []).length ? h("fieldset", {}, h("legend", {}, "Files prepared by Claude"),
+        h("table", {}, h("tbody", {}, S.staged.map((f) => h("tr", {}, h("td", {}, f.filename), h("td", { class: "note" }, f.note || ""), h("td", {}, S.imports.some((b) => b.sha256 === f.sha256) ? "imported" : "ready"))))),
+        h("button", { onclick: importStaged }, "Import prepared files")) : null,
       h("p", { class: "note" }, "Every record is kept exactly as it came in the file; the same file cannot be imported twice.")),
     h("section", { class: "panel" },
       h("div", { class: "row spread" }, h("h2", {}, `Possible duplicates (${cands.length})`), h("div", { class: "row" }, h("button", { onclick: findDuplicates }, "Find duplicates"), h("button", { class: "quiet", onclick: autoMerge }, "Merge exact DOI/PMID matches"))),

@@ -67,6 +67,16 @@ Browser test (needs the two servers running on an empty database, and `pip insta
 python platform/e2e/ui_flow.py
 ```
 
+## Statistical engine
+
+`platform/stats/engine.R` does all pooling (R + metafor). Check it against published reference values and an independent formula implementation:
+
+```bash
+cd platform/stats/validation && Rscript validate.R     # writes REPORT.md; exits 1 if any check fails
+```
+
+Needs R with the `metafor` and `jsonlite` packages. Re-run after every R or metafor upgrade.
+
 ## What v1 does not do yet
 
 PubMed XML / NBIB / EndNote import; e-mail invitations (people register themselves, then the owner adds them); automatic PDF retrieval; data extraction, risk of bias and the statistics module (planned); sign-in through Google or the university. The Supabase-based Review Studio on the `main` branch is unchanged.

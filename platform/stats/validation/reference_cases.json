@@ -1,0 +1,529 @@
+[
+  {
+    "id": "normand1999_rd_dl",
+    "source": "Normand SL. Stat Med 1999;18:321-59, Table VII (p. 349): risk difference, percentage points",
+    "note": "Expected values are in percentage points; the engine works in proportions, so they are divided by 100.",
+    "spec": {
+      "measure": "RD",
+      "model": {
+        "method": "DL",
+        "hksj": "never"
+      },
+      "rows": [
+        {
+          "study_id": 1,
+          "ai": 2,
+          "n1i": 39,
+          "ci": 1,
+          "n2i": 43
+        },
+        {
+          "study_id": 2,
+          "ai": 4,
+          "n1i": 44,
+          "ci": 4,
+          "n2i": 44
+        },
+        {
+          "study_id": 3,
+          "ai": 6,
+          "n1i": 107,
+          "ci": 4,
+          "n2i": 110
+        },
+        {
+          "study_id": 4,
+          "ai": 7,
+          "n1i": 103,
+          "ci": 5,
+          "n2i": 100
+        },
+        {
+          "study_id": 5,
+          "ai": 7,
+          "n1i": 110,
+          "ci": 3,
+          "n2i": 106
+        },
+        {
+          "study_id": 6,
+          "ai": 11,
+          "n1i": 154,
+          "ci": 4,
+          "n2i": 146
+        }
+      ]
+    },
+    "expected": {
+      "estimate": 0.029444,
+      "ci_lb": 0.003831,
+      "ci_ub": 0.055058,
+      "tau2": 0
+    }
+  },
+  {
+    "id": "normand1999_md_dl",
+    "source": "Normand SL. Stat Med 1999;18:321-59, Table IX (p. 352): mean difference, DerSimonian-Laird",
+    "note": "Pooled within-study SD used for both arms, as in the paper.",
+    "spec": {
+      "measure": "MD",
+      "model": {
+        "method": "DL",
+        "hksj": "never"
+      },
+      "rows": [
+        {
+          "study_id": "Edinburgh",
+          "m1i": 55,
+          "sd1i": 56.1743126175857,
+          "n1i": 155,
+          "m2i": 75,
+          "sd2i": 56.1743126175857,
+          "n2i": 156
+        },
+        {
+          "study_id": "Orpington-Mild",
+          "m1i": 27,
+          "sd1i": 5.67710385643255,
+          "n1i": 31,
+          "m2i": 29,
+          "sd2i": 5.67710385643255,
+          "n2i": 32
+        },
+        {
+          "study_id": "Orpington-Moderate",
+          "m1i": 64,
+          "sd1i": 23.607908279501,
+          "n1i": 75,
+          "m2i": 119,
+          "sd2i": 23.607908279501,
+          "n2i": 71
+        },
+        {
+          "study_id": "Orpington-Severe",
+          "m1i": 66,
+          "sd1i": 36.7695526217005,
+          "n1i": 18,
+          "m2i": 137,
+          "sd2i": 36.7695526217005,
+          "n2i": 18
+        },
+        {
+          "study_id": "Montreal-Home",
+          "m1i": 14,
+          "sd1i": 10,
+          "n1i": 8,
+          "m2i": 18,
+          "sd2i": 10,
+          "n2i": 13
+        },
+        {
+          "study_id": "Montreal-Transfer",
+          "m1i": 19,
+          "sd1i": 5.76810437122831,
+          "n1i": 57,
+          "m2i": 18,
+          "sd2i": 5.76810437122831,
+          "n2i": 52
+        },
+        {
+          "study_id": "Newcastle",
+          "m1i": 52,
+          "sd1i": 39.9647921974407,
+          "n1i": 34,
+          "m2i": 41,
+          "sd2i": 39.9647921974407,
+          "n2i": 33
+        },
+        {
+          "study_id": "Umea",
+          "m1i": 21,
+          "sd1i": 23.4910233641312,
+          "n1i": 110,
+          "m2i": 31,
+          "sd2i": 23.4910233641312,
+          "n2i": 183
+        },
+        {
+          "study_id": "Uppsala",
+          "m1i": 30,
+          "sd1i": 24.0096571479819,
+          "n1i": 60,
+          "m2i": 23,
+          "sd2i": 24.0096571479819,
+          "n2i": 52
+        }
+      ]
+    },
+    "expected": {
+      "estimate": -14.0972,
+      "ci_lb": -24.4454,
+      "ci_ub": -3.749,
+      "tau2": 218.7216
+    }
+  },
+  {
+    "id": "normand1999_md_reml",
+    "source": "Normand SL. Stat Med 1999;18:321-59, Table IX (p. 352): mean difference, REML",
+    "spec": {
+      "measure": "MD",
+      "model": {
+        "method": "REML",
+        "hksj": "never"
+      },
+      "rows": [
+        {
+          "study_id": "Edinburgh",
+          "m1i": 55,
+          "sd1i": 56.1743126175857,
+          "n1i": 155,
+          "m2i": 75,
+          "sd2i": 56.1743126175857,
+          "n2i": 156
+        },
+        {
+          "study_id": "Orpington-Mild",
+          "m1i": 27,
+          "sd1i": 5.67710385643255,
+          "n1i": 31,
+          "m2i": 29,
+          "sd2i": 5.67710385643255,
+          "n2i": 32
+        },
+        {
+          "study_id": "Orpington-Moderate",
+          "m1i": 64,
+          "sd1i": 23.607908279501,
+          "n1i": 75,
+          "m2i": 119,
+          "sd2i": 23.607908279501,
+          "n2i": 71
+        },
+        {
+          "study_id": "Orpington-Severe",
+          "m1i": 66,
+          "sd1i": 36.7695526217005,
+          "n1i": 18,
+          "m2i": 137,
+          "sd2i": 36.7695526217005,
+          "n2i": 18
+        },
+        {
+          "study_id": "Montreal-Home",
+          "m1i": 14,
+          "sd1i": 10,
+          "n1i": 8,
+          "m2i": 18,
+          "sd2i": 10,
+          "n2i": 13
+        },
+        {
+          "study_id": "Montreal-Transfer",
+          "m1i": 19,
+          "sd1i": 5.76810437122831,
+          "n1i": 57,
+          "m2i": 18,
+          "sd2i": 5.76810437122831,
+          "n2i": 52
+        },
+        {
+          "study_id": "Newcastle",
+          "m1i": 52,
+          "sd1i": 39.9647921974407,
+          "n1i": 34,
+          "m2i": 41,
+          "sd2i": 39.9647921974407,
+          "n2i": 33
+        },
+        {
+          "study_id": "Umea",
+          "m1i": 21,
+          "sd1i": 23.4910233641312,
+          "n1i": 110,
+          "m2i": 31,
+          "sd2i": 23.4910233641312,
+          "n2i": 183
+        },
+        {
+          "study_id": "Uppsala",
+          "m1i": 30,
+          "sd1i": 24.0096571479819,
+          "n1i": 60,
+          "m2i": 23,
+          "sd2i": 24.0096571479819,
+          "n2i": 52
+        }
+      ]
+    },
+    "expected": {
+      "estimate": -15.1217,
+      "ci_lb": -32.6716,
+      "ci_ub": 2.4282,
+      "tau2": 685.1965
+    }
+  },
+  {
+    "id": "raudenbush2009_knha_reml",
+    "source": "Raudenbush SW. In: Cooper H et al. Handbook of Research Synthesis and Meta-Analysis, 2nd ed., 2009, Table 16.3 (p. 309): Knapp-Hartung, REML",
+    "spec": {
+      "measure": "GEN",
+      "model": {
+        "method": "REML",
+        "hksj": "always"
+      },
+      "rows": [
+        {
+          "study_id": 1,
+          "yi": 0.03,
+          "vi": 0.0156
+        },
+        {
+          "study_id": 2,
+          "yi": 0.12,
+          "vi": 0.0216
+        },
+        {
+          "study_id": 3,
+          "yi": -0.14,
+          "vi": 0.0279
+        },
+        {
+          "study_id": 4,
+          "yi": 1.18,
+          "vi": 0.1391
+        },
+        {
+          "study_id": 5,
+          "yi": 0.26,
+          "vi": 0.1362
+        },
+        {
+          "study_id": 6,
+          "yi": -0.06,
+          "vi": 0.0106
+        },
+        {
+          "study_id": 7,
+          "yi": -0.02,
+          "vi": 0.0106
+        },
+        {
+          "study_id": 8,
+          "yi": -0.32,
+          "vi": 0.0484
+        },
+        {
+          "study_id": 9,
+          "yi": 0.27,
+          "vi": 0.0269
+        },
+        {
+          "study_id": 10,
+          "yi": 0.8,
+          "vi": 0.063
+        },
+        {
+          "study_id": 11,
+          "yi": 0.54,
+          "vi": 0.0912
+        },
+        {
+          "study_id": 12,
+          "yi": 0.18,
+          "vi": 0.0497
+        },
+        {
+          "study_id": 13,
+          "yi": -0.02,
+          "vi": 0.0835
+        },
+        {
+          "study_id": 14,
+          "yi": 0.23,
+          "vi": 0.0841
+        },
+        {
+          "study_id": 15,
+          "yi": -0.18,
+          "vi": 0.0253
+        },
+        {
+          "study_id": 16,
+          "yi": -0.06,
+          "vi": 0.0279
+        },
+        {
+          "study_id": 17,
+          "yi": 0.3,
+          "vi": 0.0193
+        },
+        {
+          "study_id": 18,
+          "yi": 0.07,
+          "vi": 0.0088
+        },
+        {
+          "study_id": 19,
+          "yi": -0.07,
+          "vi": 0.0303
+        }
+      ]
+    },
+    "expected": {
+      "estimate": 0.0837,
+      "se_analysis_scale": 0.0616,
+      "ci_lb": -0.0457,
+      "ci_ub": 0.2131,
+      "tau2": 0.0188
+    }
+  },
+  {
+    "id": "raudenbush2009_knha_dl",
+    "source": "Raudenbush SW. Handbook of Research Synthesis and Meta-Analysis, 2nd ed., 2009, Table 16.3 (p. 309): Knapp-Hartung, DerSimonian-Laird",
+    "spec": {
+      "measure": "GEN",
+      "model": {
+        "method": "DL",
+        "hksj": "always"
+      },
+      "rows": [
+        {
+          "study_id": 1,
+          "yi": 0.03,
+          "vi": 0.0156
+        },
+        {
+          "study_id": 2,
+          "yi": 0.12,
+          "vi": 0.0216
+        },
+        {
+          "study_id": 3,
+          "yi": -0.14,
+          "vi": 0.0279
+        },
+        {
+          "study_id": 4,
+          "yi": 1.18,
+          "vi": 0.1391
+        },
+        {
+          "study_id": 5,
+          "yi": 0.26,
+          "vi": 0.1362
+        },
+        {
+          "study_id": 6,
+          "yi": -0.06,
+          "vi": 0.0106
+        },
+        {
+          "study_id": 7,
+          "yi": -0.02,
+          "vi": 0.0106
+        },
+        {
+          "study_id": 8,
+          "yi": -0.32,
+          "vi": 0.0484
+        },
+        {
+          "study_id": 9,
+          "yi": 0.27,
+          "vi": 0.0269
+        },
+        {
+          "study_id": 10,
+          "yi": 0.8,
+          "vi": 0.063
+        },
+        {
+          "study_id": 11,
+          "yi": 0.54,
+          "vi": 0.0912
+        },
+        {
+          "study_id": 12,
+          "yi": 0.18,
+          "vi": 0.0497
+        },
+        {
+          "study_id": 13,
+          "yi": -0.02,
+          "vi": 0.0835
+        },
+        {
+          "study_id": 14,
+          "yi": 0.23,
+          "vi": 0.0841
+        },
+        {
+          "study_id": 15,
+          "yi": -0.18,
+          "vi": 0.0253
+        },
+        {
+          "study_id": 16,
+          "yi": -0.06,
+          "vi": 0.0279
+        },
+        {
+          "study_id": 17,
+          "yi": 0.3,
+          "vi": 0.0193
+        },
+        {
+          "study_id": 18,
+          "yi": 0.07,
+          "vi": 0.0088
+        },
+        {
+          "study_id": 19,
+          "yi": -0.07,
+          "vi": 0.0303
+        }
+      ]
+    },
+    "expected": {
+      "estimate": 0.0893,
+      "se_analysis_scale": 0.0636,
+      "ci_lb": -0.0442,
+      "ci_ub": 0.2229,
+      "tau2": 0.0259
+    }
+  },
+  {
+    "id": "rothman2008_mh_rr",
+    "source": "Rothman KJ, Greenland S, Lash TL. Modern Epidemiology, 3rd ed., 2008, Chapter 15, Table 15-1: Mantel-Haenszel risk ratio, 90% CI",
+    "spec": {
+      "measure": "RR",
+      "level": 90,
+      "min_studies": 2,
+      "model": {
+        "method": "DL",
+        "hksj": "never"
+      },
+      "rows": [
+        {
+          "study_id": "Age <55",
+          "ai": 8,
+          "bi": 98,
+          "ci": 5,
+          "di": 115
+        },
+        {
+          "study_id": "Age 55+",
+          "ai": 22,
+          "bi": 76,
+          "ci": 16,
+          "di": 69
+        }
+      ]
+    },
+    "expected": {
+      "sensitivity_mantel_haenszel_common_effect.estimate": 1.3256,
+      "sensitivity_mantel_haenszel_common_effect.ci_lb": 0.8658,
+      "sensitivity_mantel_haenszel_common_effect.ci_ub": 2.0296
+    }
+  }
+]

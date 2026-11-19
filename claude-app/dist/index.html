@@ -561,18 +561,21 @@ async function autoMerge() {
 // Claude's duplicate decisions arrive as proposals on each candidate pair; applying them writes every merge at once.
 const tsum = (t) => { let x = 0; for (const ch of P.normTitle(t)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x.toString(16); };
 async function applyProposals() {
-  if (!(S.dedup.candidates || []).length && S.dedupStaged) {   // decisions too large to send through chat arrive as a page asset
-    try { const r = await fetch("/_blob/" + S.dedupStaged.asset); if (!r.ok) throw new Error("could not load Claude's decisions (" + r.status + ")"); S.dedup = await r.json(); await saveDedup(S.dedup); }
+  let replace = false;
+  if (S.dedupStaged && !(S.dedup.candidates || []).some((c) => c.proposal)) {   // decisions too large for chat arrive as a page asset; they replace earlier pair decisions
+    if (Object.values(S.assign).some((m) => Object.keys(m).length)) return say("Screening assignments exist; duplicate decisions can no longer be replaced in one step.", true);
+    try { const r = await fetch("/_blob/" + S.dedupStaged.asset); if (!r.ok) throw new Error("could not load Claude's decisions (" + r.status + ")"); const d = await r.json(); S.dedup = { candidates: d.candidates, log: [...(S.dedup.log || []), ...(d.log || [])] }; replace = true; }
     catch (e) { return say(String(e.message || e), true); }
   }
   const cands = (S.dedup.candidates || []).map((c) => ({ ...c }));
   const todo = cands.filter((c) => c.status === "open" && c.proposal);
   const bad = todo.filter((c) => (c.ta && tsum((S.pubs[c.a] || {}).title) !== c.ta) || (c.tb && tsum((S.pubs[c.b] || {}).title) !== c.tb));
   if (bad.length) return say(`${bad.length} decisions point at records whose titles do not match; nothing was applied.`, true);
-  const parent = {}; const find = (x) => { let r = rootOf(x); while (parent[r]) r = parent[r]; return r; };
+  const parent = {}; const find = (x) => { let r = replace ? x : rootOf(x); while (parent[r]) r = parent[r]; return r; };
   for (const c of todo.filter((c) => c.proposal.action === "merge")) { const a = find(c.a), b = find(c.b); if (a !== b) parent[a < b ? b : a] = a < b ? a : b; }
   const changes = {};
   for (const pid of Object.keys(parent)) changes[pid] = { mergedInto: find(pid) };
+  if (replace) for (const [pid, p] of Object.entries(S.pubs)) if (p.mergedInto && !changes[pid]) changes[pid] = { mergedInto: null };
   const now = nowIso();
   for (const c of todo) { c.status = c.proposal.action === "merge" ? "merged" : "not duplicates"; c.by = c.proposal.by || "claude"; c.at = now; }
   try {
@@ -864,7 +867,7 @@ function importTab() {
       h("p", { class: "note" }, "Every record is kept exactly as it came in the file; the same file cannot be imported twice.")),
     h("section", { class: "panel" },
       h("div", { class: "row spread" }, h("h2", {}, `Possible duplicates (${cands.length})`), h("div", { class: "row" },
-        cands.some(([c]) => c.proposal) || (S.dedupStaged && !(S.dedup.candidates || []).length) ? h("button", { onclick: applyProposals }, cands.some(([c]) => c.proposal) ? `Apply Claude's decisions (${cands.filter(([c]) => c.proposal).length})` : `Apply Claude's decisions (${S.dedupStaged.pairs || ""})`) : null,
+        cands.some(([c]) => c.proposal) || (S.dedupStaged && !(S.dedup.candidates || []).some((c) => c.proposal)) ? h("button", { onclick: applyProposals }, cands.some(([c]) => c.proposal) ? `Apply Claude's decisions (${cands.filter(([c]) => c.proposal).length})` : `Apply Claude's decisions (${S.dedupStaged.pairs || ""})`) : null,
         h("button", { class: "quiet", onclick: findDuplicates }, "Find duplicates"), h("button", { class: "quiet", onclick: autoMerge }, "Merge exact DOI/PMID matches"))),
       dedupSummary(),
       cands.length ? h("table", {}, h("thead", {}, h("tr", {}, ["Publication A", "Publication B", "Match", "Check", ""].map((x) => h("th", {}, x)))),

@@ -5,3 +5,4 @@ platform/web/node_modules/
 platform/web/.next/
 platform/web/next-env.d.ts
 platform/web/tsconfig.tsbuildinfo
+claude-app/test/harness.html

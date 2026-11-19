@@ -112,9 +112,9 @@ Rayyan keeps records and duplicate groups, and has no study level (flow 01, §1.
 |---|---|---|
 | `doi` | same normalised DOI | 1.0 |
 | `pmid` | same PMID | 1.0 |
-| `title_year` | same normalised title (lower case, punctuation and spaces collapsed) and same year | 0.9 |
+| `title_year` | same normalised title (lower case, punctuation and spaces collapsed) and years at most 1 apart | 0.9 |
 
-**Blockers** (a candidate with a blocker is never merged automatically and is shown with the blocker): title or type indicates *correction, erratum, retraction, comment, reply, protocol*; the two `kind`s differ (e.g. journal article vs conference abstract); years differ by more than one.
+**Blockers** (a candidate with a blocker is never merged automatically and is shown with the blocker): title or type indicates *correction, erratum, retraction, comment, reply, protocol*; the two `kind`s differ (e.g. journal article vs conference abstract). A candidate blocked only by `kind` is offered as a study-level link instead.
 
 **Actions** (owner or lead):
 
@@ -125,7 +125,7 @@ Rayyan keeps records and duplicate groups, and has no study level (flow 01, §1.
 
 Nothing is deleted. The history of every link is in `publication_sources` and `audit_log`.
 
-Expected result on `test-data/synthetic/` (13 entries → 9 publications → 8 studies): Alpha 3 copies merged, Beta 2 copies found only by `title_year`, Delta article 2 copies merged, Delta conference abstract **not** merged (blocker: different kind) but linkable at study level, Epsilon correction **not** merged with Alpha (blocker).
+Expected result on `test-data/synthetic/` (13 entries → 9 publications → 7 studies): Alpha 3 copies merged, Beta 2 copies found only by `title_year`, Delta article 2 copies merged, Delta conference abstract **not** merged (blocker: different kind, years 2020 vs 2021) but offered as a study-level link, Epsilon correction **not** merged with Alpha (blocker).
 
 ## 6. Team, roles and permissions
 

@@ -24,4 +24,4 @@ All records are invented and labelled SYNTHETIC. DOIs use the unassigned prefix 
 | Epsilon | MEDLINE 99000005 | Separate record (correction notice) | Must not be merged with Alpha even though the title contains Alpha's title |
 | Gamma, Zeta, Eta, Theta | one row each | Unique | No false merges |
 
-Expected counts: 13 imported rows → **9 publications** → **8 studies** (Delta article and Delta abstract are one study; Epsilon is a notice attached to Alpha, not a study).
+Expected counts: 13 imported rows → **9 publications** → **7 studies**. Delta article and Delta abstract are one study. Epsilon is a correction notice: it stays a separate publication, attached to the Alpha study as a secondary report, so it adds no study. (An earlier version of this file said 8 studies; that count forgot to attach Epsilon.)

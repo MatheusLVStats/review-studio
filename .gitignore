@@ -1,0 +1,6 @@
+__pycache__/
+.pytest_cache/
+platform/api/files/
+platform/web/node_modules/
+platform/web/.next/
+platform/web/next-env.d.ts
